@@ -1,0 +1,96 @@
+wandb: Detected [openai] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+100%|██████████| 3/3 [00:30<00:00,  9.73s/it][INFO|trainer.py:3993] 2026-01-20 19:59:35,394 >> Saving model checkpoint to /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3
+{'loss': 0.6035, 'grad_norm': 5.800589310035875, 'learning_rate': 0.0, 'epoch': 1.0}
+{'loss': 0.5773, 'grad_norm': 5.604592538065725, 'learning_rate': 1e-05, 'epoch': 2.0}
+{'loss': 0.5354, 'grad_norm': 3.5185021362300315, 'learning_rate': 5e-06, 'epoch': 3.0}
+[INFO|configuration_utils.py:424] 2026-01-20 19:59:35,398 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/config.json
+[INFO|configuration_utils.py:904] 2026-01-20 19:59:35,399 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/generation_config.json
+[INFO|modeling_utils.py:3725] 2026-01-20 19:59:36,562 >> Model weights saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/model.safetensors
+[INFO|tokenization_utils_base.py:2356] 2026-01-20 19:59:36,563 >> chat template saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/chat_template.jinja
+[INFO|tokenization_utils_base.py:2525] 2026-01-20 19:59:36,564 >> tokenizer config file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/tokenizer_config.json
+[INFO|tokenization_utils_base.py:2534] 2026-01-20 19:59:36,564 >> Special tokens file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/special_tokens_map.json
+/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/distributed/distributed_c10d.py:4876: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  warnings.warn(  # warn only once
+[2026-01-20 19:59:36,698] [INFO] [logging.py:128:log_dist] [Rank 0] [Torch] Checkpoint global_step3 is about to be saved!
+[2026-01-20 19:59:36,705] [INFO] [logging.py:128:log_dist] [Rank 0] Saving model checkpoint: /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt
+[2026-01-20 19:59:36,705] [INFO] [torch_checkpoint_engine.py:21:save] [Torch] Saving /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt...
+[2026-01-20 19:59:36,715] [INFO] [torch_checkpoint_engine.py:23:save] [Torch] Saved /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt.
+[2026-01-20 19:59:36,719] [INFO] [torch_checkpoint_engine.py:21:save] [Torch] Saving /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt...
+Traceback (most recent call last):
+  File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/launcher.py", line 23, in <module>
+    launch()
+  File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/launcher.py", line 19, in launch
+    run_exp()
+  File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/train/tuner.py", line 112, in run_exp
+    _training_function(config={"args": args, "callbacks": callbacks})
+  File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/train/tuner.py", line 72, in _training_function
+    run_sft(model_args, data_args, training_args, finetuning_args, generating_args, callbacks)
+  File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/train/sft/workflow.py", line 96, in run_sft
+    train_result = trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 2240, in train
+    return inner_training_loop(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 2622, in _inner_training_loop
+    self._maybe_log_save_evaluate(
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 3102, in _maybe_log_save_evaluate
+    self._save_checkpoint(model, trial)
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 3210, in _save_checkpoint
+    self._save_optimizer_and_scheduler(output_dir)
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 3326, in _save_optimizer_and_scheduler
+    self.model_wrapped.save_checkpoint(output_dir)
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/deepspeed/runtime/engine.py", line 3201, in save_checkpoint
+    self._save_zero_checkpoint(save_dir, tag)
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/deepspeed/runtime/engine.py", line 3562, in _save_zero_checkpoint
+    self.checkpoint_engine.save(zero_sd, zero_checkpoint_name)
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/deepspeed/runtime/checkpoint_engine/torch_checkpoint_engine.py", line 22, in save
+    torch.save(state_dict, path)
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/serialization.py", line 966, in save
+    with _open_zipfile_writer(f) as opened_zipfile:
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/serialization.py", line 828, in _open_zipfile_writer
+    return container(name_or_buffer)  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/serialization.py", line 792, in __init__
+    torch._C.PyTorchFileWriter(
+KeyboardInterrupt
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/launcher.py", line 23, in <module>
+[rank0]:     launch()
+[rank0]:   File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/launcher.py", line 19, in launch
+[rank0]:     run_exp()
+[rank0]:   File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/train/tuner.py", line 112, in run_exp
+[rank0]:     _training_function(config={"args": args, "callbacks": callbacks})
+[rank0]:   File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/train/tuner.py", line 72, in _training_function
+[rank0]:     run_sft(model_args, data_args, training_args, finetuning_args, generating_args, callbacks)
+[rank0]:   File "/home/test/My_codes/West/LLaMA-Factory/src/llamafactory/train/sft/workflow.py", line 96, in run_sft
+[rank0]:     train_result = trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
+[rank0]:                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 2240, in train
+[rank0]:     return inner_training_loop(
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 2622, in _inner_training_loop
+[rank0]:     self._maybe_log_save_evaluate(
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 3102, in _maybe_log_save_evaluate
+[rank0]:     self._save_checkpoint(model, trial)
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 3210, in _save_checkpoint
+[rank0]:     self._save_optimizer_and_scheduler(output_dir)
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/transformers/trainer.py", line 3326, in _save_optimizer_and_scheduler
+[rank0]:     self.model_wrapped.save_checkpoint(output_dir)
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/deepspeed/runtime/engine.py", line 3201, in save_checkpoint
+[rank0]:     self._save_zero_checkpoint(save_dir, tag)
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/deepspeed/runtime/engine.py", line 3562, in _save_zero_checkpoint
+[rank0]:     self.checkpoint_engine.save(zero_sd, zero_checkpoint_name)
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/deepspeed/runtime/checkpoint_engine/torch_checkpoint_engine.py", line 22, in save
+[rank0]:     torch.save(state_dict, path)
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/serialization.py", line 966, in save
+[rank0]:     with _open_zipfile_writer(f) as opened_zipfile:
+[rank0]:          ^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/serialization.py", line 828, in _open_zipfile_writer
+[rank0]:     return container(name_or_buffer)  # type: ignore[arg-type]
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/serialization.py", line 792, in __init__
+[rank0]:     torch._C.PyTorchFileWriter(
+[rank0]: KeyboardInterrupt

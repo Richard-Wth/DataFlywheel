@@ -1,0 +1,11 @@
+# 将本文件复制为 .gitignore（按需调整）
+#
+#   cp gitignore.template .gitignore
+#
+
+.env
+__pycache__/
+*.pyc
+output/
+saves/
+data/

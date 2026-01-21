@@ -1,0 +1,19 @@
+You are given a math problem, the ground-truth answer, and model predictions that failed.
+Analyze the failure and return a JSON object with the following fields:
+- "error_type": short category label
+- "reason": concise explanation of why the model failed
+- "missing_skill": what skill or knowledge is missing
+- "fix_suggestion": what training signal would help
+
+Return JSON only. Do not include any extra text.
+
+Problem:
+{{ question }}
+
+Ground-truth answer:
+{{ answer }}
+
+Model predictions (failed):
+{% for p in predictions %}
+- {{ p }}
+{% endfor %}

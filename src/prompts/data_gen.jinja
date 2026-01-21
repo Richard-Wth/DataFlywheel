@@ -1,0 +1,16 @@
+Generate ONE new contest-style math problem+solution that targets the missing_skill, using the given question only as context.
+Hard rule: the new problem must NOT be the same as the given question and should NOT be similar in structure/template.
+
+Return JSON ONLY:
+- instruction: string, must start with `Return your final response within \\boxed{}.` then the problem statement
+- input: string (usually "")
+- output: string containing `<|begin_of_thought|>...<|end_of_thought|>` then `<|begin_of_solution|>...<|end_of_solution|>`, and the final answer includes `\\boxed{...}`
+
+Context question (do not copy / paraphrase):
+{{ question }}
+
+Attribution:
+- error_type: {{ attribution.error_type }}
+- reason: {{ attribution.reason }}
+- missing_skill: {{ attribution.missing_skill }}
+- fix_suggestion: {{ attribution.fix_suggestion }}

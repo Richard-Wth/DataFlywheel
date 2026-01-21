@@ -1,0 +1,31 @@
+wandb: Detected [openai] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+ 19%|█▉        | 26/135 [14:23<1:00:01, 33.04s/it]
+{'loss': 0.6947, 'grad_norm': 3.639854513381353, 'learning_rate': 0.0, 'epoch': 0.02}
+[2026-01-21 14:03:36,545] [WARNING] [stage3.py:2118:step] 1 pytorch allocator cache flushes since last step. this happens when there is high memory pressure and is detrimental to performance. if this is happening frequently consider adjusting settings to reduce memory consumption. If you are unable to make the cache flushes go away consider adding get_accelerator().empty_cache() calls in your training loop to ensure that all ranks flush their caches at the same time
+{'loss': 0.6558, 'grad_norm': 3.3950235008117677, 'learning_rate': 7.142857142857143e-07, 'epoch': 0.04}
+{'loss': 0.4952, 'grad_norm': 2.6727156310119633, 'learning_rate': 1.4285714285714286e-06, 'epoch': 0.07}
+{'loss': 0.7308, 'grad_norm': 4.417252324582696, 'learning_rate': 2.1428571428571427e-06, 'epoch': 0.09}
+{'loss': 0.5547, 'grad_norm': 3.875429593663719, 'learning_rate': 2.8571428571428573e-06, 'epoch': 0.11}
+{'loss': 0.5853, 'grad_norm': 2.875191627714704, 'learning_rate': 3.5714285714285718e-06, 'epoch': 0.13}
+{'loss': 0.5333, 'grad_norm': 2.46341269384579, 'learning_rate': 4.2857142857142855e-06, 'epoch': 0.16}
+{'loss': 0.6471, 'grad_norm': 2.449605181483894, 'learning_rate': 5e-06, 'epoch': 0.18}
+{'loss': 0.4595, 'grad_norm': 1.0195028860277071, 'learning_rate': 5.7142857142857145e-06, 'epoch': 0.2}
+{'loss': 0.3916, 'grad_norm': 0.7950696804779315, 'learning_rate': 6.4285714285714295e-06, 'epoch': 0.22}
+{'loss': 0.4854, 'grad_norm': 1.0619510359047186, 'learning_rate': 7.1428571428571436e-06, 'epoch': 0.24}
+{'loss': 0.4771, 'grad_norm': 0.948501983877161, 'learning_rate': 7.857142857142858e-06, 'epoch': 0.27}
+{'loss': 0.5243, 'grad_norm': 0.8386746928501201, 'learning_rate': 8.571428571428571e-06, 'epoch': 0.29}
+{'loss': 0.4963, 'grad_norm': 0.7047367136033076, 'learning_rate': 9.285714285714288e-06, 'epoch': 0.31}
+{'loss': 0.4596, 'grad_norm': 0.5985445751937575, 'learning_rate': 1e-05, 'epoch': 0.33}
+{'loss': 0.4851, 'grad_norm': 0.7451178617135149, 'learning_rate': 9.998314826517564e-06, 'epoch': 0.36}
+{'loss': 0.4642, 'grad_norm': 0.7836776765044556, 'learning_rate': 9.993260441994116e-06, 'epoch': 0.38}
+{'loss': 0.4416, 'grad_norm': 0.7017575414770292, 'learning_rate': 9.984840253435569e-06, 'epoch': 0.4}
+{'loss': 0.4203, 'grad_norm': 0.6762861611191678, 'learning_rate': 9.973059936633308e-06, 'epoch': 0.42}
+{'loss': 0.4326, 'grad_norm': 0.5268955964877462, 'learning_rate': 9.957927432338332e-06, 'epoch': 0.44}
+{'loss': 0.3628, 'grad_norm': 0.47187745243802126, 'learning_rate': 9.939452940908627e-06, 'epoch': 0.47}
+{'loss': 0.388, 'grad_norm': 0.473537223583111, 'learning_rate': 9.917648915433413e-06, 'epoch': 0.49}
+{'loss': 0.4443, 'grad_norm': 0.49335275014019375, 'learning_rate': 9.892530053338909e-06, 'epoch': 0.51}
+{'loss': 0.4268, 'grad_norm': 0.45192707824527983, 'learning_rate': 9.864113286481237e-06, 'epoch': 0.53}
+{'loss': 0.4619, 'grad_norm': 0.49779999325596386, 'learning_rate': 9.832417769733185e-06, 'epoch': 0.56}
+{'loss': 0.3922, 'grad_norm': 0.425979886973539, 'learning_rate': 9.797464868072489e-06, 'epoch': 0.58}

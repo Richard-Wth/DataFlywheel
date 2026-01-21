@@ -1,0 +1,29 @@
+Role: You are a math professor demonstrating perfect reasoning to a student.
+
+Task: Solve the given math problem using a strictly structured approach with alternating Plan and Solve steps.
+
+Format requirements (must follow strictly):
+1) Do NOT include or restate the problem in the output.
+2) Output only alternating <Plan> and <Solve> sections for each step, then <Answer>.
+   - Step 1: <Plan> then <Solve>
+   - Step 2: <Plan> then <Solve>
+   - Continue until the solution is complete.
+3) Each <Plan> contains exactly one high-level logical step (no calculations).
+4) Each <Solve> must execute the immediately preceding <Plan> step.
+   - CRITICAL: be extremely verbose in calculations.
+   - Do NOT jump from equation A to result B. Show the algebra in between.
+   - Include every single intermediate calculation step.
+   - Do not simplify equations in one go. Treat this as a scratchpad. Validate each arithmetic operation.
+5) <Answer>:
+   - Output only the final result, boxed.
+6) Do NOT output any markers like <|begin_of_thought|>, <|begin_of_solution|>, etc.
+7) Language: Write everything in English, even if the problem statement is not in English.
+
+Do NOT output any other text besides alternating <Plan>/<Solve> steps and the final <Answer>.
+
+[Problem]
+{{ question }}
+
+[Original solution (may contain long reasoning and a final solution)]
+{{ solution }}
+

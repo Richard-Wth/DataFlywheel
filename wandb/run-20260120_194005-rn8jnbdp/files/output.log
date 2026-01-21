@@ -1,0 +1,49 @@
+wandb: Detected [openai] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+100%|██████████| 3/3 [00:30<00:00,  9.71s/it][INFO|trainer.py:3993] 2026-01-20 19:40:38,570 >> Saving model checkpoint to /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3
+{'loss': 0.6035, 'grad_norm': 5.800035107124809, 'learning_rate': 0.0, 'epoch': 1.0}
+{'loss': 0.5773, 'grad_norm': 5.604440520365709, 'learning_rate': 1e-05, 'epoch': 2.0}
+{'loss': 0.5355, 'grad_norm': 3.5240621951857825, 'learning_rate': 5e-06, 'epoch': 3.0}
+[INFO|configuration_utils.py:424] 2026-01-20 19:40:38,574 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/config.json
+[INFO|configuration_utils.py:904] 2026-01-20 19:40:38,574 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/generation_config.json
+[INFO|modeling_utils.py:3725] 2026-01-20 19:40:40,299 >> Model weights saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/model.safetensors
+[INFO|tokenization_utils_base.py:2356] 2026-01-20 19:40:40,300 >> chat template saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/chat_template.jinja
+[INFO|tokenization_utils_base.py:2525] 2026-01-20 19:40:40,300 >> tokenizer config file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/tokenizer_config.json
+[INFO|tokenization_utils_base.py:2534] 2026-01-20 19:40:40,301 >> Special tokens file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/special_tokens_map.json
+/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/distributed/distributed_c10d.py:4876: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  warnings.warn(  # warn only once
+[2026-01-20 19:40:40,437] [INFO] [logging.py:128:log_dist] [Rank 0] [Torch] Checkpoint global_step3 is about to be saved!
+[2026-01-20 19:40:40,443] [INFO] [logging.py:128:log_dist] [Rank 0] Saving model checkpoint: /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt
+[2026-01-20 19:40:40,443] [INFO] [torch_checkpoint_engine.py:21:save] [Torch] Saving /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt...
+[2026-01-20 19:40:40,453] [INFO] [torch_checkpoint_engine.py:23:save] [Torch] Saved /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt.
+[2026-01-20 19:40:40,455] [INFO] [torch_checkpoint_engine.py:21:save] [Torch] Saving /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt...
+[2026-01-20 19:40:44,743] [INFO] [torch_checkpoint_engine.py:23:save] [Torch] Saved /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt.
+[2026-01-20 19:40:44,746] [INFO] [engine.py:3567:_save_zero_checkpoint] zero checkpoint saved /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt
+[2026-01-20 19:40:44,804] [INFO] [torch_checkpoint_engine.py:33:commit] [Torch] Checkpoint global_step3 is ready now!
+[INFO|trainer.py:2676] 2026-01-20 19:40:44,806 >>
+
+Training completed. Do not forget to share your model on huggingface.co/models =)
+
+
+100%|██████████| 3/3 [00:37<00:00, 12.55s/it]
+{'train_runtime': 40.9678, 'train_samples_per_second': 0.732, 'train_steps_per_second': 0.073, 'train_loss': 0.5720906654993693, 'epoch': 3.0}
+[INFO|trainer.py:3993] 2026-01-20 19:40:45,072 >> Saving model checkpoint to /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0
+[INFO|configuration_utils.py:424] 2026-01-20 19:40:45,075 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/config.json
+[INFO|configuration_utils.py:904] 2026-01-20 19:40:45,075 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/generation_config.json
+[INFO|modeling_utils.py:3725] 2026-01-20 19:40:46,234 >> Model weights saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/model.safetensors
+[INFO|tokenization_utils_base.py:2356] 2026-01-20 19:40:46,235 >> chat template saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/chat_template.jinja
+[INFO|tokenization_utils_base.py:2525] 2026-01-20 19:40:46,236 >> tokenizer config file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/tokenizer_config.json
+[INFO|tokenization_utils_base.py:2534] 2026-01-20 19:40:46,236 >> Special tokens file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/special_tokens_map.json
+***** train metrics *****
+  epoch                    =        3.0
+  total_flos               =      284GF
+  train_loss               =     0.5721
+  train_runtime            = 0:00:40.96
+  train_samples_per_second =      0.732
+  train_steps_per_second   =      0.073
+Figure saved at: /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/training_loss.png
+[WARNING|2026-01-20 19:40:46] llamafactory.extras.ploting:148 >> No metric eval_loss to plot.
+[WARNING|2026-01-20 19:40:46] llamafactory.extras.ploting:148 >> No metric eval_accuracy to plot.
+[INFO|modelcard.py:450] 2026-01-20 19:40:46,439 >> Dropping the following result as it does not have all the necessary fields:
+{'task': {'name': 'Causal Language Modeling', 'type': 'text-generation'}}

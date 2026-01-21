@@ -1,0 +1,50 @@
+wandb: Detected [openai] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+100%|██████████| 3/3 [01:45<00:00, 34.41s/it][INFO|trainer.py:3993] 2026-01-20 17:09:12,990 >> Saving model checkpoint to /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3
+{'loss': 0.4679, 'grad_norm': 3.134424493260679, 'learning_rate': 0.0, 'epoch': 1.0}
+[2026-01-20 17:08:36,202] [WARNING] [stage3.py:2118:step] 1 pytorch allocator cache flushes since last step. this happens when there is high memory pressure and is detrimental to performance. if this is happening frequently consider adjusting settings to reduce memory consumption. If you are unable to make the cache flushes go away consider adding get_accelerator().empty_cache() calls in your training loop to ensure that all ranks flush their caches at the same time
+{'loss': 0.4489, 'grad_norm': 3.0587384621668967, 'learning_rate': 1e-05, 'epoch': 2.0}
+{'loss': 0.3978, 'grad_norm': 1.8649547072671875, 'learning_rate': 5e-06, 'epoch': 3.0}
+[INFO|configuration_utils.py:424] 2026-01-20 17:09:12,993 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/config.json
+[INFO|configuration_utils.py:904] 2026-01-20 17:09:12,994 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/generation_config.json
+[INFO|modeling_utils.py:3733] 2026-01-20 17:09:23,157 >> The model is bigger than the maximum size per checkpoint (5GB) and is going to be split in 4 checkpoint shards. You can find where each parameters has been saved in the index located at /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/model.safetensors.index.json.
+[INFO|tokenization_utils_base.py:2356] 2026-01-20 17:09:23,158 >> chat template saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/chat_template.jinja
+[INFO|tokenization_utils_base.py:2525] 2026-01-20 17:09:23,159 >> tokenizer config file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/tokenizer_config.json
+[INFO|tokenization_utils_base.py:2534] 2026-01-20 17:09:23,159 >> Special tokens file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/special_tokens_map.json
+/home/test/anaconda3/envs/lf/lib/python3.11/site-packages/torch/distributed/distributed_c10d.py:4876: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  warnings.warn(  # warn only once
+[2026-01-20 17:09:23,300] [INFO] [logging.py:128:log_dist] [Rank 0] [Torch] Checkpoint global_step3 is about to be saved!
+[2026-01-20 17:09:23,684] [INFO] [logging.py:128:log_dist] [Rank 0] Saving model checkpoint: /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt
+[2026-01-20 17:09:23,685] [INFO] [torch_checkpoint_engine.py:21:save] [Torch] Saving /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt...
+[2026-01-20 17:09:23,696] [INFO] [torch_checkpoint_engine.py:23:save] [Torch] Saved /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/zero_pp_rank_0_mp_rank_00_model_states.pt.
+[2026-01-20 17:09:23,700] [INFO] [torch_checkpoint_engine.py:21:save] [Torch] Saving /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt...
+[2026-01-20 17:09:54,570] [INFO] [torch_checkpoint_engine.py:23:save] [Torch] Saved /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt.
+[2026-01-20 17:09:54,571] [INFO] [engine.py:3567:_save_zero_checkpoint] zero checkpoint saved /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/checkpoint-3/global_step3/bf16_zero_pp_rank_0_mp_rank_00_optim_states.pt
+[2026-01-20 17:09:54,752] [INFO] [torch_checkpoint_engine.py:33:commit] [Torch] Checkpoint global_step3 is ready now!
+[INFO|trainer.py:2676] 2026-01-20 17:09:54,754 >>
+
+Training completed. Do not forget to share your model on huggingface.co/models =)
+
+
+100%|██████████| 3/3 [02:31<00:00, 50.50s/it]
+{'train_runtime': 154.1096, 'train_samples_per_second': 0.195, 'train_steps_per_second': 0.019, 'train_loss': 0.438177227973938, 'epoch': 3.0}
+[INFO|trainer.py:3993] 2026-01-20 17:09:59,380 >> Saving model checkpoint to /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0
+[INFO|configuration_utils.py:424] 2026-01-20 17:09:59,383 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/config.json
+[INFO|configuration_utils.py:904] 2026-01-20 17:09:59,383 >> Configuration saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/generation_config.json
+[INFO|modeling_utils.py:3733] 2026-01-20 17:10:09,782 >> The model is bigger than the maximum size per checkpoint (5GB) and is going to be split in 4 checkpoint shards. You can find where each parameters has been saved in the index located at /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/model.safetensors.index.json.
+[INFO|tokenization_utils_base.py:2356] 2026-01-20 17:10:09,783 >> chat template saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/chat_template.jinja
+[INFO|tokenization_utils_base.py:2525] 2026-01-20 17:10:09,784 >> tokenizer config file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/tokenizer_config.json
+[INFO|tokenization_utils_base.py:2534] 2026-01-20 17:10:09,784 >> Special tokens file saved in /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/special_tokens_map.json
+***** train metrics *****
+  epoch                    =        3.0
+  total_flos               =     1337GF
+  train_loss               =     0.4382
+  train_runtime            = 0:02:34.10
+  train_samples_per_second =      0.195
+  train_steps_per_second   =      0.019
+Figure saved at: /home/test/My_codes/West/ID/DataFlywheel/saves/qwen3-8b-full-sft/iter_0/training_loss.png
+[WARNING|2026-01-20 17:10:10] llamafactory.extras.ploting:148 >> No metric eval_loss to plot.
+[WARNING|2026-01-20 17:10:10] llamafactory.extras.ploting:148 >> No metric eval_accuracy to plot.
+[INFO|modelcard.py:450] 2026-01-20 17:10:10,347 >> Dropping the following result as it does not have all the necessary fields:
+{'task': {'name': 'Causal Language Modeling', 'type': 'text-generation'}}
