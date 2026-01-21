@@ -113,7 +113,7 @@ def _build_training_dict(
 
     intro = f"{TRAINING_USER_PREFIX} {question}".strip() if question else TRAINING_USER_PREFIX
     return {
-        "introduction": intro,
+        "instruction": intro,
         "input": "",
         "output": out,
     }

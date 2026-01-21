@@ -10,30 +10,42 @@ DATAFLYWHEEL_ROOT="${DATAFLYWHEEL_ROOT:-${REPO_ROOT}/DataFlywheel}"
 LLAMAFACTORY_ROOT="${LLAMAFACTORY_ROOT:-${REPO_ROOT}/LlamaFactory}"
 
 PIPELINE_PYTHON="${PIPELINE_PYTHON:-python}"
-INFERENCE_PYTHON="${INFERENCE_PYTHON:-/home/test/anaconda3/envs/vllm/bin/python}"
+INFERENCE_PYTHON="${INFERENCE_PYTHON:-python}"
 
-BASE_MODEL="${BASE_MODEL:-/home/test/My_codes/West/ID/models/Qwen3_8B}"
-TRAIN_DATA="${TRAIN_DATA:-/home/test/My_codes/West/ID/DataFlywheel/data/training/openthoughts_math_1h.json}"
-BENCHMARK_PATH="${BENCHMARK_PATH:-${DATAFLYWHEEL_ROOT}/data/benchmark/benchmark.json}"
+BASE_MODEL="${BASE_MODEL:-Qwen/Qwen3-0.6B}"
+SEED_TRAIN_DATA="${SEED_TRAIN_DATA:-}"
 LLAMAFACTORY_CONFIG="${LLAMAFACTORY_CONFIG:-${LLAMAFACTORY_ROOT}/examples/train_full/qwen3_full_sft.yaml}"
 
 SAVE_DIR="${SAVE_DIR:-${DATAFLYWHEEL_ROOT}/saves}"
 DATA_DIR="${DATA_DIR:-${DATAFLYWHEEL_ROOT}/data}"
 OUTPUT_DIR="${OUTPUT_DIR:-${DATAFLYWHEEL_ROOT}/output}"
+TRAINING_JSON="${TRAINING_JSON:-${DATA_DIR}/training/training.json}"
+BENCHMARK_PATH="${BENCHMARK_PATH:-${DATA_DIR}/benchmark/math500.json}"
 # Run name controls subfolders under saves/ and output/ (logs, inference, judge, etc.)
-RUN_NAME="${RUN_NAME:-qwen3-8b}"
+RUN_NAME="${RUN_NAME:-qwen3-0.6b-math500}"
 
 ITERATIONS="${ITERATIONS:-5}"
-MODE="${MODE:-sample}"
+MODE="${MODE:-full}"
 NUM_PER_CASE="${NUM_PER_CASE:-3}"
 INFER_BACKEND="${INFER_BACKEND:-vllm}"
-NUM_SAMPLES="${NUM_SAMPLES:-4}"
-INFER_LIMIT="${INFER_LIMIT:-20}"
-JUDGE_K="${JUDGE_K:-4}"
+NUM_SAMPLES="${NUM_SAMPLES:-1}"
+INFER_LIMIT="${INFER_LIMIT:-500}"
+JUDGE_K="${JUDGE_K:-1}"
+TEMPERATURE="${TEMPERATURE:-0.7}"
+TOP_P="${TOP_P:-0.95}"
+TOP_K="${TOP_K:-50}"
+MAX_TOKENS="${MAX_TOKENS:-8192}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-8192}"
+
+EXTRA_TRAIN_DATA_ARGS=()
+if [[ -n "${SEED_TRAIN_DATA}" ]]; then
+  EXTRA_TRAIN_DATA_ARGS+=(--train-data "${SEED_TRAIN_DATA}")
+fi
 
 "${PIPELINE_PYTHON}" "${DATAFLYWHEEL_ROOT}/src/pipeline.py" \
   --base-model "${BASE_MODEL}" \
-  --train-data "${TRAIN_DATA}" \
+  "${EXTRA_TRAIN_DATA_ARGS[@]}" \
+  --training-json "${TRAINING_JSON}" \
   --benchmark-path "${BENCHMARK_PATH}" \
   --llamafactory-config "${LLAMAFACTORY_CONFIG}" \
   --llamafactory-root "${LLAMAFACTORY_ROOT}" \
@@ -47,6 +59,11 @@ JUDGE_K="${JUDGE_K:-4}"
   --inference-python "${INFERENCE_PYTHON}" \
   --inference-backend "${INFER_BACKEND}" \
   --num-samples "${NUM_SAMPLES}" \
+  --temperature "${TEMPERATURE}" \
+  --top_p "${TOP_P}" \
+  --top_k "${TOP_K}" \
+  --max_tokens "${MAX_TOKENS}" \
+  --max_model_len "${MAX_MODEL_LEN}" \
   --infer-limit "${INFER_LIMIT}" \
   --judge-k "${JUDGE_K}" \
   --judge-no-resume \

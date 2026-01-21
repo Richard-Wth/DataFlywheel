@@ -1,16 +1,23 @@
-You are given an original math question and its correct final answer.
+You are given a bad-case math question and its attribution (error analysis). Use them only as context.
 
-Task: Write a detailed, fully correct solution for the SAME question, using the given answer as ground truth to verify and fix your work.
+Task:
+1) Create a NEW math question that is clearly different from the original (not a paraphrase or trivial number swap), but targets a similar topic and difficulty.
+2) Solve your NEW question with a correct, complete reasoning process and final answer.
 
 Hard rules:
 - Do NOT output JSON.
-- Do NOT output any special tags such as `<|begin_of_thought|>...`, `<|begin_of_solution|>...`, `<think>...</think>`, or XML tags.
-- Do NOT restate the question. Only output the solution/answer.
-- Your final line MUST be the final answer wrapped in `\\boxed{...}` and it MUST be the last thing you write.
-- The content inside your final `\\boxed{...}` MUST match the given answer (mathematically equivalent). If needed, rewrite it into an equivalent simplified form.
+- Do NOT restate or paraphrase the original question.
+- The new question must be unambiguous and have a single correct final answer.
+- Use the attribution to avoid the same failure mode.
+- The reasoning must be correct and consistent with the final answer. Verify before you finish.
+- Output format (must follow strictly):
+  a) A line starting with `New question:` followed by your new problem.
+  b) A single `<think>...</think>` block containing the public reasoning steps (no policy or self-referential text).
+  c) A solution paragraph outside `<think>` that includes the final answer in `\\boxed{...}`.
+  d) The `\\boxed{...}` must be the last thing you write.
 
-Original question (for reference; do not rewrite it in your output):
+Bad-case question (context only; do not copy):
 {{ question }}
 
-Correct final answer (use as ground truth; do not output it verbatim unless it is the final boxed line):
-{{ answer }}
+Attribution (context only):
+{{ attribution }}

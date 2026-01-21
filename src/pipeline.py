@@ -5,12 +5,14 @@ import shlex
 import shutil
 import subprocess
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import random
 import sys
 import atexit
 
 from utils import read_json, write_json
+
+MATH500_DATASET_ID = "HuggingFaceH4/MATH-500"
 
 
 def _now_tag() -> str:
@@ -112,6 +114,64 @@ def select_benchmark(output_path: str, mode: str) -> str:
     selector.save_data(data, output_path)
     selector.print_statistics(data)
     return output_path
+
+
+def _set_hf_home(hf_home: str) -> None:
+    if not hf_home:
+        return
+    hf_home = os.path.abspath(hf_home)
+    os.environ.setdefault("HF_HOME", hf_home)
+    os.makedirs(hf_home, exist_ok=True)
+
+
+def _set_offline(offline: bool) -> None:
+    if not offline:
+        return
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+
+
+def build_math500_benchmark(
+    output_path: str,
+    split: str = "test",
+    limit: Optional[int] = None,
+) -> str:
+    from datasets import load_dataset
+
+    ds = load_dataset(MATH500_DATASET_ID, split=split)
+    if limit is not None:
+        ds = ds.select(range(int(limit)))
+
+    rows: List[Dict[str, Any]] = []
+    for i, ex in enumerate(ds):
+        ex = dict(ex)
+        ans = ex.get("answer", "")
+        if isinstance(ans, dict):
+            ex["answer"] = str(ans.get("value", "")).strip()
+        else:
+            ex["answer"] = str(ans).strip()
+
+        ex["_dataset"] = "math500"
+        ex["_dataset_id"] = MATH500_DATASET_ID
+        ex["_difficulty"] = ex.get("_difficulty", "hard")
+        ex["_sample_index"] = i
+        rows.append(ex)
+
+    _ensure_dir(os.path.dirname(output_path))
+    write_json(output_path, rows)
+    print(f"已构建 MATH-500 benchmark: {output_path} ({len(rows)} 条)")
+    return output_path
+
+
+def _ensure_json_list_file(path: str, seed_path: Optional[str] = None) -> None:
+    if os.path.exists(path):
+        return
+    _ensure_dir(os.path.dirname(path))
+    if seed_path and os.path.exists(seed_path):
+        if os.path.abspath(seed_path) != os.path.abspath(path):
+            shutil.copyfile(seed_path, path)
+            return
+    write_json(path, [])
 
 
 def _render_llamafactory_config(
@@ -275,6 +335,11 @@ def run_inference(
     output_path: str,
     tp: int,
     num_samples: int,
+    temperature: float,
+    top_p: float,
+    top_k: int,
+    max_tokens: int,
+    max_model_len: Optional[int],
     limit: Optional[int],
     use_xml_tags: bool,
     normalize_xml_output: bool,
@@ -294,11 +359,21 @@ def run_inference(
         output_path,
         "--tp",
         str(tp),
+        "--temperature",
+        str(temperature),
+        "--top_p",
+        str(top_p),
+        "--top_k",
+        str(top_k),
+        "--max_tokens",
+        str(max_tokens),
         "--num_samples",
         str(num_samples),
         "--backend",
         backend,
     ]
+    if max_model_len is not None:
+        cmd.extend(["--max_model_len", str(max_model_len)])
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
     if use_xml_tags:
@@ -413,8 +488,14 @@ def main() -> None:
     parser.add_argument(
         "--train-data",
         type=str,
-        required=True,
-        help="初始训练数据 JSON 文件（list）",
+        default=None,
+        help="初始训练数据 JSON 文件（list，可选，用于初始化 training.json）",
+    )
+    parser.add_argument(
+        "--training-json",
+        type=str,
+        default=None,
+        help="累计训练数据文件（training.json），每轮生成数据都会追加到该文件",
     )
     parser.add_argument(
         "--data-dir",
@@ -438,7 +519,24 @@ def main() -> None:
         "--benchmark-path",
         type=str,
         default=None,
-        help="测试集输出路径，默认写到 data/benchmark.json",
+        help="测试集输出路径（JSON list），默认写到 data/benchmark/math500.json",
+    )
+    parser.add_argument(
+        "--benchmark-split",
+        type=str,
+        default="test",
+        help="benchmark 数据集 split（默认 test）",
+    )
+    parser.add_argument(
+        "--benchmark-build-limit",
+        type=int,
+        default=None,
+        help="构建 benchmark 时只取前 N 条（默认全量）",
+    )
+    parser.add_argument(
+        "--rebuild-benchmark",
+        action="store_true",
+        help="强制重建 benchmark 文件",
     )
     parser.add_argument(
         "--llamafactory-cmd",
@@ -464,11 +562,16 @@ def main() -> None:
         help="LlamaFactory 根目录（用于 python -m llamafactory.cli）",
     )
     parser.add_argument("--tp", type=int, default=8, help="vLLM 推理并行度")
-    parser.add_argument("--num-samples", type=int, default=8, help="推理候选数")
+    parser.add_argument("--temperature", type=float, default=0.7, help="推理温度（math 常用 0.0~0.8）")
+    parser.add_argument("--top_p", type=float, default=0.95, help="top_p（math 常用 0.9~0.98）")
+    parser.add_argument("--top_k", type=int, default=50, help="top_k（-1 关闭）")
+    parser.add_argument("--max_tokens", type=int, default=8192, help="vLLM max_tokens（生成长度）")
+    parser.add_argument("--max_model_len", type=int, default=8192, help="vLLM max_model_len（上下文长度）")
+    parser.add_argument("--num-samples", type=int, default=1, help="推理候选数（pass@1 用 1）")
     parser.add_argument("--infer-limit", type=int, default=None, help="推理样本数上限（快速验证）")
     parser.add_argument("--use-xml-tags", action="store_true", help="推理加入 XML tags 约束")
     parser.add_argument("--normalize-xml-output", action="store_true", help="推理后规整 XML 输出")
-    parser.add_argument("--judge-k", type=int, default=8, help="评测 pass@k")
+    parser.add_argument("--judge-k", type=int, default=1, help="评测 pass@k（pass@1 用 1）")
     parser.add_argument("--judge-no-resume", action="store_true", help="评测不使用断点续跑")
     parser.add_argument("--bad-attr-model", type=str, default="gpt-5.2", help="bad case 归因模型")
     parser.add_argument("--gen-model", type=str, default="gpt-5.2", help="数据生成模型")
@@ -477,6 +580,13 @@ def main() -> None:
     parser.add_argument("--ckpt", type=int, default=None, help="推理时选用 checkpoint-<ckpt>")
     parser.add_argument("--shuffle-merged", action="store_true", help="合并训练数据后进行 shuffle")
     parser.add_argument("--shuffle-seed", type=int, default=42, help="shuffle 随机种子")
+    parser.add_argument(
+        "--hf-home",
+        type=str,
+        default=None,
+        help="HuggingFace 缓存目录（避免写入 ~/.cache），默认写到 output/hf_home",
+    )
+    parser.add_argument("--offline", action="store_true", help="使用 HF 离线模式（不访问网络）")
     parser.add_argument(
         "--inference-python",
         type=str,
@@ -509,6 +619,10 @@ def main() -> None:
     _ensure_dir(args.output_dir)
     _ensure_dir(args.save_dir)
 
+    hf_home = args.hf_home or os.path.join(args.output_dir, "hf_home")
+    _set_hf_home(hf_home)
+    _set_offline(bool(args.offline))
+
     global _LOG_FH
     log_path = args.log_file or os.path.join(args.output_dir, "logs", args.run_name, f"{_now_tag()}.log")
     _ensure_dir(os.path.dirname(log_path))
@@ -518,82 +632,73 @@ def main() -> None:
     atexit.register(lambda: _LOG_FH and _LOG_FH.close())
     print(f"日志已写入: {log_path}")
 
-    benchmark_path = args.benchmark_path or os.path.join(args.data_dir, "benchmark.json")
-    if not os.path.exists(benchmark_path):
-        select_benchmark(benchmark_path, args.mode)
+    benchmark_path = args.benchmark_path or os.path.join(args.data_dir, "benchmark", "math500.json")
+    if args.rebuild_benchmark or (not os.path.exists(benchmark_path)):
+        build_math500_benchmark(
+            output_path=benchmark_path,
+            split=args.benchmark_split,
+            limit=args.benchmark_build_limit,
+        )
 
-    base_train_data = args.train_data
-    current_train_data = base_train_data
+    training_json = args.training_json or os.path.join(args.data_dir, "training", "training.json")
+    _ensure_json_list_file(training_json, seed_path=args.train_data)
+    if not args.dry_run:
+        print(f"累计训练数据: {_count_json_list(training_json)} 条 ({training_json})")
 
-    stat_paths: List[str] = []
+    # 0) Base model inference on MATH-500 (baseline)
+    base_tag = "base"
+    print(f"\n=== Baseline: {args.base_model} ===")
+    base_infer_output = os.path.join(args.output_dir, "inference", args.run_name, base_tag, "pred.json")
+    run_inference(
+        script_path=os.path.join(os.path.dirname(__file__), "inference.py"),
+        python_exec=args.inference_python,
+        model_path=args.base_model,
+        input_path=benchmark_path,
+        output_path=base_infer_output,
+        tp=int(args.tp),
+        num_samples=int(args.num_samples),
+        temperature=float(args.temperature),
+        top_p=float(args.top_p),
+        top_k=int(args.top_k),
+        max_tokens=int(args.max_tokens),
+        max_model_len=int(args.max_model_len) if args.max_model_len is not None else None,
+        limit=args.infer_limit,
+        use_xml_tags=bool(args.use_xml_tags),
+        normalize_xml_output=bool(args.normalize_xml_output),
+        ckpt=args.ckpt,
+        backend=args.inference_backend,
+        dry_run=args.dry_run,
+    )
+
+    base_judge_output_jsonl = os.path.join(args.output_dir, "judge", args.run_name, base_tag, "judge.jsonl")
+    base_judge_summary = os.path.join(args.output_dir, "judge", args.run_name, base_tag, "summary.json")
+    base_judge_stat = os.path.join(args.output_dir, "judge", args.run_name, base_tag, "stat.json")
+    base_bad_cases_path = os.path.join(args.output_dir, "judge", args.run_name, base_tag, "bad_cases.json")
+    run_judge(
+        script_path=os.path.join(os.path.dirname(__file__), "judge_inference.py"),
+        input_path=base_infer_output,
+        output_jsonl=base_judge_output_jsonl,
+        summary_path=base_judge_summary,
+        statistic_path=base_judge_stat,
+        bad_cases_path=base_bad_cases_path,
+        k=int(args.judge_k),
+        no_resume=bool(args.judge_no_resume),
+        dry_run=args.dry_run,
+    )
+
+    # Each round uses the previous model's bad cases to generate more data.
+    prev_bad_cases = base_bad_cases_path
+    prev_stat = base_judge_stat
+
+    post_stat_paths: List[str] = []
     for i in range(int(args.iterations)):
         iter_tag = f"iter_{i}"
         print(f"\n=== 开始迭代 {iter_tag} ===")
 
-        train_data_path = current_train_data
-
-        train_output_dir = os.path.join(args.save_dir, args.run_name, iter_tag)
-        if not args.dry_run:
-            train_count = _count_json_list(train_data_path)
-            print(f"训练样本数: {train_count} ({train_data_path})")
-        train_with_llamafactory(
-            cmd_template=args.llamafactory_cmd,
-            config_template=args.llamafactory_config,
-            llamafactory_root=args.llamafactory_root,
-            # Always train from the base model each iteration (no continual finetuning).
-            model_name_or_path=args.base_model,
-            train_data_path=train_data_path,
-            output_dir=train_output_dir,
-            run_name=args.run_name,
-            iteration=i,
-            config_output_dir=os.path.join(args.data_dir, "llamafactory_configs", args.run_name),
-            data_dir=args.data_dir,
-            dry_run=args.dry_run,
-        )
-
-        infer_output = os.path.join(args.output_dir, "inference", args.run_name, iter_tag, "pred.json")
-        run_inference(
-            script_path=os.path.join(os.path.dirname(__file__), "inference.py"),
-            python_exec=args.inference_python,
-            model_path=train_output_dir,
-            input_path=benchmark_path,
-            output_path=infer_output,
-            tp=int(args.tp),
-            num_samples=int(args.num_samples),
-            limit=args.infer_limit,
-            use_xml_tags=bool(args.use_xml_tags),
-            normalize_xml_output=bool(args.normalize_xml_output),
-            ckpt=args.ckpt,
-            backend=args.inference_backend,
-            dry_run=args.dry_run,
-        )
-
-        judge_output_jsonl = os.path.join(args.output_dir, "judge", args.run_name, iter_tag, "judge.jsonl")
-        judge_summary = os.path.join(args.output_dir, "judge", args.run_name, iter_tag, "summary.json")
-        judge_stat = os.path.join(args.output_dir, "judge", args.run_name, iter_tag, "stat.json")
-        bad_cases_path = os.path.join(args.output_dir, "judge", args.run_name, iter_tag, "bad_cases.json")
-        run_judge(
-            script_path=os.path.join(os.path.dirname(__file__), "judge_inference.py"),
-            input_path=infer_output,
-            output_jsonl=judge_output_jsonl,
-            summary_path=judge_summary,
-            statistic_path=judge_stat,
-            bad_cases_path=bad_cases_path,
-            k=int(args.judge_k),
-            no_resume=bool(args.judge_no_resume),
-            dry_run=args.dry_run,
-        )
-        stat_paths.append(judge_stat)
-
-        if (i == 0) and (not args.dry_run):
-            raw_dir = os.path.join(args.output_dir, "judge", args.run_name, "raw")
-            _ensure_dir(raw_dir)
-            shutil.copyfile(judge_stat, os.path.join(raw_dir, "stat.json"))
-
         bad_attr_output = os.path.join(args.output_dir, "bad_attr", args.run_name, iter_tag, "bad_attr.json")
         run_bad_attr(
             script_path=os.path.join(os.path.dirname(__file__), "bad_attr.py"),
-            input_path=bad_cases_path,
+            input_path=prev_bad_cases,
             output_path=bad_attr_output,
             model=args.bad_attr_model,
             max_workers=int(args.max_workers),
@@ -611,31 +716,103 @@ def main() -> None:
             dry_run=args.dry_run,
         )
 
-        next_train_data_path = os.path.join(args.data_dir, "merged", args.run_name, f"iter_{i+1}.json")
         if not args.dry_run:
             merged_count = _merge_json_lists(
-                [current_train_data, gen_output],
-                next_train_data_path,
+                [training_json, gen_output],
+                training_json,
                 shuffle=bool(args.shuffle_merged),
                 seed=int(args.shuffle_seed),
             )
-            print(f"已合并训练数据: {merged_count} 条 -> {next_train_data_path}")
-        current_train_data = next_train_data_path
+            print(f"已累计训练数据: {merged_count} 条 -> {training_json}")
+
+        train_output_dir = os.path.join(args.save_dir, args.run_name, iter_tag)
+        if not args.dry_run:
+            train_count = _count_json_list(training_json)
+            print(f"本轮训练样本数: {train_count} ({training_json})")
+        train_with_llamafactory(
+            cmd_template=args.llamafactory_cmd,
+            config_template=args.llamafactory_config,
+            llamafactory_root=args.llamafactory_root,
+            # 每轮都从 base model 重新 SFT（使用累计 training.json）
+            model_name_or_path=args.base_model,
+            train_data_path=training_json,
+            output_dir=train_output_dir,
+            run_name=args.run_name,
+            iteration=i,
+            config_output_dir=os.path.join(args.data_dir, "llamafactory_configs", args.run_name),
+            data_dir=args.data_dir,
+            dry_run=args.dry_run,
+        )
+
+        # Evaluate trained model on MATH-500
+        post_tag = os.path.join(iter_tag, "post")
+        infer_output = os.path.join(args.output_dir, "inference", args.run_name, post_tag, "pred.json")
+        run_inference(
+            script_path=os.path.join(os.path.dirname(__file__), "inference.py"),
+            python_exec=args.inference_python,
+            model_path=train_output_dir,
+            input_path=benchmark_path,
+            output_path=infer_output,
+            tp=int(args.tp),
+            num_samples=int(args.num_samples),
+            temperature=float(args.temperature),
+            top_p=float(args.top_p),
+            top_k=int(args.top_k),
+            max_tokens=int(args.max_tokens),
+            max_model_len=int(args.max_model_len) if args.max_model_len is not None else None,
+            limit=args.infer_limit,
+            use_xml_tags=bool(args.use_xml_tags),
+            normalize_xml_output=bool(args.normalize_xml_output),
+            ckpt=args.ckpt,
+            backend=args.inference_backend,
+            dry_run=args.dry_run,
+        )
+
+        judge_output_jsonl = os.path.join(args.output_dir, "judge", args.run_name, post_tag, "judge.jsonl")
+        judge_summary = os.path.join(args.output_dir, "judge", args.run_name, post_tag, "summary.json")
+        judge_stat = os.path.join(args.output_dir, "judge", args.run_name, post_tag, "stat.json")
+        bad_cases_path = os.path.join(args.output_dir, "judge", args.run_name, post_tag, "bad_cases.json")
+        run_judge(
+            script_path=os.path.join(os.path.dirname(__file__), "judge_inference.py"),
+            input_path=infer_output,
+            output_jsonl=judge_output_jsonl,
+            summary_path=judge_summary,
+            statistic_path=judge_stat,
+            bad_cases_path=bad_cases_path,
+            k=int(args.judge_k),
+            no_resume=bool(args.judge_no_resume),
+            dry_run=args.dry_run,
+        )
+        post_stat_paths.append(judge_stat)
+
+        # Compare with baseline (or previous round)
+        if not args.dry_run:
+            compare_dir = os.path.join(args.output_dir, "judge", args.run_name, "compare")
+            _ensure_dir(compare_dir)
+            base_vs_out = os.path.join(compare_dir, f"base_vs_{iter_tag}.json")
+            _compare_stats(base_judge_stat, judge_stat, base_vs_out)
+            prev_vs_out = os.path.join(compare_dir, f"prev_vs_{iter_tag}.json")
+            _compare_stats(prev_stat, judge_stat, prev_vs_out)
+            print(f"已生成指标对比: {base_vs_out}")
+
+        # Next round mines bad cases from the latest trained model.
+        prev_bad_cases = bad_cases_path
+        prev_stat = judge_stat
 
     print("\n全部迭代完成")
 
-    if not args.dry_run and len(stat_paths) >= 2:
-        n = max(2, int(args.compare_last))
-        last_paths = stat_paths[-n:]
-        # Compare the last two iterations for quick signal.
-        stat_a = last_paths[-2]
-        stat_b = last_paths[-1]
-        compare_out = os.path.join(
-            args.output_dir, "judge", args.run_name, "compare", f"{_now_tag()}_last2.json"
+    if not args.dry_run and post_stat_paths:
+        summary_out = os.path.join(args.output_dir, "judge", args.run_name, "compare", "summary_paths.json")
+        write_json(
+            summary_out,
+            {
+                "baseline_stat": base_judge_stat,
+                "iterations": post_stat_paths,
+                "training_json": training_json,
+                "benchmark": benchmark_path,
+            },
         )
-        _ensure_dir(os.path.dirname(compare_out))
-        _compare_stats(stat_a, stat_b, compare_out)
-        print(f"已生成指标对比: {compare_out}")
+        print(f"已写入对比索引: {summary_out}")
 
 
 if __name__ == "__main__":
