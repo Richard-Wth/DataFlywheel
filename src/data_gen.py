@@ -2,44 +2,32 @@ import argparse
 import concurrent.futures
 import json
 import os
+import re
 from typing import Any, Dict, List, Tuple
 
 from jinja2 import Template
 from tqdm import tqdm
 
-from utils import init_openai_client, robust_json_parse, write_json
+from utils import init_openai_client, write_json
 
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a data generator for math contest model training. "
-    "Generate high-quality, diverse training samples based on the given failure attribution. "
-    "You MUST include a detailed chain-of-thought inside <|begin_of_thought|>...<|end_of_thought|>, then a clean solution inside "
-    "<|begin_of_solution|>...<|end_of_solution|>. "
-    "Return JSON only."
-)
-
-TRAINING_SYSTEM_PROMPT = (
-    "Your role as an assistant involves thoroughly exploring questions through a systematic long thinking process before providing the final precise and accurate solutions. "
-    "This requires engaging in a comprehensive cycle of analysis, summarizing, exploration, reassessment, reflection, backtracing, and iteration to develop well-considered thinking process. "
-    "Please structure your response into two main sections: Thought and Solution. "
-    "In the Thought section, detail your reasoning process using the specified format: <|begin_of_thought|> {thought with steps separated with '\\n\\n'} <|end_of_thought|> "
-    "Each step should include detailed considerations such as analisying questions, summarizing relevant findings, brainstorming new ideas, verifying the accuracy of the current steps, refining any errors, and revisiting previous steps. "
-    "In the Solution section, based on various attempts, explorations, and reflections from the Thought section, systematically present the final solution that you deem correct. "
-    "The solution should remain a logical, accurate, concise expression style and detail necessary step needed to reach the conclusion, formatted as follows: <|begin_of_solution|> {final formatted, precise, and clear solution} <|end_of_solution|> "
-    "Now, try to solve the following question through the above guidelines:"
+    "Given an original question and its failure attribution, write a NEW, detailed, fully correct solution. "
+    "Do NOT output JSON. Do NOT output any special tags. "
+    "The final answer MUST be in \\boxed{...} and MUST be the last thing you write. "
+    "Do NOT include any policy/disclaimer text. "
 )
 
 
-def _canonicalize_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
-    """Enforce fields required by training format, regardless of model quirks."""
-    if not isinstance(sample, dict):
-        return {}
-    s = dict(sample)
-    # Force training system prompt to match the base training data.
-    s["system"] = TRAINING_SYSTEM_PROMPT
-    if "input" not in s or not isinstance(s.get("input"), str):
-        s["input"] = ""
-    return s
+TRAINING_USER_PREFIX = "Return your final response within \\\\boxed{}."
+
+_THINK_BLOCK_RE = re.compile(r"<think>[\s\S]*?</think>\s*", re.IGNORECASE)
+_TAG_BLOCK_RE = re.compile(
+    r"<\|begin_of_thought\|>[\s\S]*?<\|end_of_thought\|>\s*"
+    r"|<\|begin_of_solution\|>[\s\S]*?<\|end_of_solution\|>\s*",
+    re.IGNORECASE,
+)
 
 
 def _load_template(path: str) -> Template:
@@ -100,14 +88,35 @@ def _call_model(
     content = resp.choices[0].message.content
     return content.strip() if isinstance(content, str) else ""
 
+def _strip_unwanted_tags(text: str) -> str:
+    """Best-effort cleanup if model still outputs think/tags."""
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    text = _THINK_BLOCK_RE.sub("", text)
+    text = text.replace("<think>", "").replace("</think>", "")
+    # Remove the special training tags if they appear.
+    text = _TAG_BLOCK_RE.sub("", text)
+    return text.strip()
 
-def _normalize_samples(obj: Any) -> List[Dict[str, Any]]:
-    """Accept either a single sample dict or a list of sample dicts."""
-    if isinstance(obj, dict):
-        return [obj]
-    if isinstance(obj, list):
-        return [s for s in obj if isinstance(s, dict)]
-    return []
+
+def _build_training_dict(
+    question: str,
+    model_output: str,
+) -> Dict[str, Any]:
+    """Post-process raw model text into a training dict with 3 keys."""
+    question = question if isinstance(question, str) else ""
+    question = question.strip()
+
+    out = _strip_unwanted_tags(model_output)
+    if not out:
+        return {}
+
+    intro = f"{TRAINING_USER_PREFIX} {question}".strip() if question else TRAINING_USER_PREFIX
+    return {
+        "introduction": intro,
+        "input": "",
+        "output": out,
+    }
 
 
 def main() -> None:
@@ -126,7 +135,6 @@ def main() -> None:
     parser.add_argument("--max-workers", type=int, default=16, help="并发数")
     parser.add_argument("--temperature", type=float, default=0.2, help="生成温度")
     parser.add_argument("--num-per-case", type=int, default=1, help="每条归因生成样本数")
-    parser.add_argument("--max-regen", type=int, default=6, help="生成结果不合格时的重采样次数（每条样本）")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as f:
@@ -139,21 +147,24 @@ def main() -> None:
 
     template = _load_template(args.prompt)
     num_per_case = max(1, int(args.num_per_case))
-    max_regen = max(1, int(args.max_regen))
 
     def _build_one(idx_item: Tuple[int, Dict[str, Any]]) -> Tuple[int, List[Dict[str, Any]]]:
         idx, item = idx_item
         if not isinstance(item, dict):
             return idx, []
         question = item.get("question", "")
+        answer = item.get("answer", "")
         if not isinstance(question, str) or not question.strip():
             question = json.dumps(item, ensure_ascii=False)
         question = question.strip()
+        answer = answer if isinstance(answer, str) else ""
+        answer = answer.strip()
 
         attr = item.get("attribution", {})
         prompt = template.render(
             attribution=attr,
             question=question,
+            answer=answer,
         )
         client = init_openai_client()
 
@@ -168,31 +179,13 @@ def main() -> None:
 
         samples: List[Dict[str, Any]] = []
         for _ in range(num_per_case):
-            last_reason = "not_generated"
-            for _regen in range(max_regen):
-                raw = _do_call()
-                parsed = robust_json_parse(raw)
-                if not parsed:
-                    last_reason = "json_parse_failed"
-                    continue
-                cand_list = _normalize_samples(parsed)
-                if not cand_list:
-                    last_reason = "no_candidate"
-                    continue
-                cand = _canonicalize_sample(cand_list[0])
-                # Minimal sanity check only: keep pipeline-compatible keys.
-                inst = cand.get("instruction")
-                out = cand.get("output")
-                if not (isinstance(inst, str) and inst.strip()):
-                    last_reason = "missing_or_empty_instruction"
-                    continue
-                if not (isinstance(out, str) and out.strip()):
-                    last_reason = "missing_or_empty_output"
-                    continue
+            raw = _do_call()
+            cand = _build_training_dict(
+                question=question,
+                model_output=raw,
+            )
+            if cand:
                 samples.append(cand)
-                break
-            else:
-                tqdm.write(f"[warn] skip one sample idx={idx}: {last_reason}")
         return idx, samples
 
     results: List[Tuple[int, List[Dict[str, Any]]]] = []

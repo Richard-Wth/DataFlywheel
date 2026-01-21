@@ -13,7 +13,7 @@ PIPELINE_PYTHON="${PIPELINE_PYTHON:-python}"
 INFERENCE_PYTHON="${INFERENCE_PYTHON:-/home/test/anaconda3/envs/vllm/bin/python}"
 
 BASE_MODEL="${BASE_MODEL:-/home/test/My_codes/West/ID/models/Qwen3_8B}"
-TRAIN_DATA="${TRAIN_DATA:-${DATAFLYWHEEL_ROOT}/data/training/openthoughts_math_1k.json}"
+TRAIN_DATA="${TRAIN_DATA:-/home/test/My_codes/West/ID/DataFlywheel/data/training/openthoughts_math_1h.json}"
 BENCHMARK_PATH="${BENCHMARK_PATH:-${DATAFLYWHEEL_ROOT}/data/benchmark/benchmark.json}"
 LLAMAFACTORY_CONFIG="${LLAMAFACTORY_CONFIG:-${LLAMAFACTORY_ROOT}/examples/train_full/qwen3_full_sft.yaml}"
 
@@ -25,11 +25,11 @@ RUN_NAME="${RUN_NAME:-qwen3-8b}"
 
 ITERATIONS="${ITERATIONS:-5}"
 MODE="${MODE:-sample}"
-NUM_PER_CASE="${NUM_PER_CASE:-10}"
+NUM_PER_CASE="${NUM_PER_CASE:-3}"
 INFER_BACKEND="${INFER_BACKEND:-vllm}"
-NUM_SAMPLES="${NUM_SAMPLES:-1}"
-INFER_LIMIT="${INFER_LIMIT:-100}"
-JUDGE_K="${JUDGE_K:-1}"
+NUM_SAMPLES="${NUM_SAMPLES:-4}"
+INFER_LIMIT="${INFER_LIMIT:-20}"
+JUDGE_K="${JUDGE_K:-4}"
 
 "${PIPELINE_PYTHON}" "${DATAFLYWHEEL_ROOT}/src/pipeline.py" \
   --base-model "${BASE_MODEL}" \

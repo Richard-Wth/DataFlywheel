@@ -1,16 +1,16 @@
-Generate ONE new contest-style math problem+solution that targets the missing_skill, using the given question only as context.
-Hard rule: the new problem must NOT be the same as the given question and should NOT be similar in structure/template.
+You are given an original math question and its correct final answer.
 
-Return JSON ONLY:
-- instruction: string, must start with `Return your final response within \\boxed{}.` then the problem statement
-- input: string (usually "")
-- output: string containing `<|begin_of_thought|>...<|end_of_thought|>` then `<|begin_of_solution|>...<|end_of_solution|>`, and the final answer includes `\\boxed{...}`
+Task: Write a detailed, fully correct solution for the SAME question, using the given answer as ground truth to verify and fix your work.
 
-Context question (do not copy / paraphrase):
+Hard rules:
+- Do NOT output JSON.
+- Do NOT output any special tags such as `<|begin_of_thought|>...`, `<|begin_of_solution|>...`, `<think>...</think>`, or XML tags.
+- Do NOT restate the question. Only output the solution/answer.
+- Your final line MUST be the final answer wrapped in `\\boxed{...}` and it MUST be the last thing you write.
+- The content inside your final `\\boxed{...}` MUST match the given answer (mathematically equivalent). If needed, rewrite it into an equivalent simplified form.
+
+Original question (for reference; do not rewrite it in your output):
 {{ question }}
 
-Attribution:
-- error_type: {{ attribution.error_type }}
-- reason: {{ attribution.reason }}
-- missing_skill: {{ attribution.missing_skill }}
-- fix_suggestion: {{ attribution.fix_suggestion }}
+Correct final answer (use as ground truth; do not output it verbatim unless it is the final boxed line):
+{{ answer }}
