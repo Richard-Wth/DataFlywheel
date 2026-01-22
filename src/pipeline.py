@@ -174,6 +174,28 @@ def _ensure_json_list_file(path: str, seed_path: Optional[str] = None) -> None:
     write_json(path, [])
 
 
+def _find_latest_checkpoint_dir(train_output_dir: str) -> str:
+    """Pick latest checkpoint-* directory by step number (highest)."""
+    if not train_output_dir or not os.path.isdir(train_output_dir):
+        return ""
+    best_step = None
+    best_path = ""
+    for name in os.listdir(train_output_dir):
+        if not name.startswith("checkpoint-"):
+            continue
+        suffix = name.split("checkpoint-", 1)[-1]
+        if not suffix.isdigit():
+            continue
+        step = int(suffix)
+        path = os.path.join(train_output_dir, name)
+        if not os.path.isdir(path):
+            continue
+        if best_step is None or step > best_step:
+            best_step = step
+            best_path = path
+    return best_path
+
+
 def _render_llamafactory_config(
     template_path: str,
     output_path: str,
@@ -274,6 +296,7 @@ def _ensure_dataset_info(
 def train_with_llamafactory(
     cmd_template: str,
     config_template: Optional[str],
+    llamafactory_cli: str,
     llamafactory_root: Optional[str],
     model_name_or_path: str,
     train_data_path: str,
@@ -302,8 +325,18 @@ def train_with_llamafactory(
             llamafactory_root=llamafactory_root,
             dataset_dir=dataset_dir_for_config,
         )
-        if shutil.which("llamafactory-cli"):
-            cmd = ["llamafactory-cli", "train", config_path]
+        cli = (llamafactory_cli or "llamafactory-cli").strip()
+        # Allow passing an absolute/relative path to a different env's llamafactory-cli.
+        if cli:
+            is_path_like = (os.path.sep in cli) or (os.path.altsep and os.path.altsep in cli)
+            if is_path_like:
+                if os.path.exists(cli):
+                    cmd = [cli, "train", config_path]
+                    _run_cmd(cmd, dry_run=dry_run)
+                    return
+            else:
+                if shutil.which(cli):
+                    cmd = [cli, "train", config_path]
             _run_cmd(cmd, dry_run=dry_run)
             return
 
@@ -561,6 +594,12 @@ def main() -> None:
         default="/home/test/My_codes/West/ID/LlamaFactory",
         help="LlamaFactory 根目录（用于 python -m llamafactory.cli）",
     )
+    parser.add_argument(
+        "--llamafactory-cli",
+        type=str,
+        default="llamafactory-cli",
+        help="llamafactory-cli 可执行文件路径或名称（用于指定训练环境；默认从 PATH 查找）",
+    )
     parser.add_argument("--tp", type=int, default=8, help="vLLM 推理并行度")
     parser.add_argument("--temperature", type=float, default=0.7, help="推理温度（math 常用 0.0~0.8）")
     parser.add_argument("--top_p", type=float, default=0.95, help="top_p（math 常用 0.9~0.98）")
@@ -580,6 +619,11 @@ def main() -> None:
     parser.add_argument("--ckpt", type=int, default=None, help="推理时选用 checkpoint-<ckpt>")
     parser.add_argument("--shuffle-merged", action="store_true", help="合并训练数据后进行 shuffle")
     parser.add_argument("--shuffle-seed", type=int, default=42, help="shuffle 随机种子")
+    parser.add_argument(
+        "--train-from-prev",
+        action="store_true",
+        help="每轮训练从上一轮最新 checkpoint 继续，而不是从 base 重新训练",
+    )
     parser.add_argument(
         "--hf-home",
         type=str,
@@ -689,6 +733,7 @@ def main() -> None:
     # Each round uses the previous model's bad cases to generate more data.
     prev_bad_cases = base_bad_cases_path
     prev_stat = base_judge_stat
+    prev_train_output_dir: Optional[str] = None
 
     post_stat_paths: List[str] = []
     for i in range(int(args.iterations)):
@@ -729,12 +774,23 @@ def main() -> None:
         if not args.dry_run:
             train_count = _count_json_list(training_json)
             print(f"本轮训练样本数: {train_count} ({training_json})")
+        model_for_training = args.base_model
+        if args.train_from_prev and prev_train_output_dir:
+            latest_ckpt = _find_latest_checkpoint_dir(prev_train_output_dir)
+            if latest_ckpt:
+                model_for_training = latest_ckpt
+                print(f"本轮训练将从上一轮 checkpoint 继续: {latest_ckpt}")
+            else:
+                model_for_training = prev_train_output_dir
+                print(
+                    f"[WARN] 未找到 checkpoint-*, 回退为上一轮输出目录: {prev_train_output_dir}"
+                )
         train_with_llamafactory(
             cmd_template=args.llamafactory_cmd,
             config_template=args.llamafactory_config,
+            llamafactory_cli=args.llamafactory_cli,
             llamafactory_root=args.llamafactory_root,
-            # 每轮都从 base model 重新 SFT（使用累计 training.json）
-            model_name_or_path=args.base_model,
+            model_name_or_path=model_for_training,
             train_data_path=training_json,
             output_dir=train_output_dir,
             run_name=args.run_name,
@@ -798,6 +854,7 @@ def main() -> None:
         # Next round mines bad cases from the latest trained model.
         prev_bad_cases = bad_cases_path
         prev_stat = judge_stat
+        prev_train_output_dir = train_output_dir
 
     print("\n全部迭代完成")
 

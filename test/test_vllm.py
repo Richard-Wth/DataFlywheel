@@ -9,7 +9,7 @@ from tqdm import tqdm
 from vllm import LLM, SamplingParams
 
 DATASET_ID = "HuggingFaceH4/MATH-500"
-DEFAULT_MODEL = "Qwen/Qwen3-0.6B"
+DEFAULT_MODEL = "/home/test/My_codes/West/ID/models/Qwen3_0.6B"
 
 FINAL_ANSWER_INSTRUCTION = (
     "Please reason step by step, and put your final answer in the last line within \\boxed{} "

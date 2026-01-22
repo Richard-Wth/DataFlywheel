@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
 import re
 import sys
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 
-TRAINING_PREFIX = "Return your final response within \\\\boxed{}."
-NEW_QUESTION_PREFIX = "New question:"
+FINAL_ANSWER_PREFIX = "**Final Answer:**"
 
 
 def _read_json_or_jsonl(path: str) -> List[Dict[str, Any]]:
@@ -34,38 +32,6 @@ def _read_json_or_jsonl(path: str) -> List[Dict[str, Any]]:
     return rows
 
 
-def _extract_last_boxed(text: str) -> str:
-    if not isinstance(text, str) or "\\boxed{" not in text:
-        return ""
-    starts: List[int] = []
-    needle = "\\boxed{"
-    i = 0
-    while True:
-        j = text.find(needle, i)
-        if j < 0:
-            break
-        starts.append(j)
-        i = j + len(needle)
-    for start in reversed(starts):
-        i = start + len(needle)
-        depth = 1
-        out_chars: List[str] = []
-        while i < len(text):
-            ch = text[i]
-            if ch == "{":
-                depth += 1
-                out_chars.append(ch)
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    return "".join(out_chars).strip()
-                out_chars.append(ch)
-            else:
-                out_chars.append(ch)
-            i += 1
-    return ""
-
-
 def _normalize_text(s: str) -> str:
     s = s.strip().lower()
     s = re.sub(r"\s+", " ", s)
@@ -76,15 +42,6 @@ def _first_nonempty_line(text: str) -> str:
     for line in text.splitlines():
         if line.strip():
             return line.strip()
-    return ""
-
-
-def _extract_original_question(instruction: str) -> str:
-    if not isinstance(instruction, str):
-        return ""
-    inst = instruction.strip()
-    if inst.startswith(TRAINING_PREFIX):
-        return inst[len(TRAINING_PREFIX) :].strip()
     return ""
 
 
@@ -102,27 +59,31 @@ def _validate_item(
 
     if not isinstance(instruction, str) or not instruction.strip():
         errors.append(f"[{idx}] missing or empty instruction")
+    else:
+        # Instruction should be the NEW question text (not a training prefix).
+        if instruction.strip().lower().startswith("return your final response within"):
+            errors.append(f"[{idx}] instruction still contains legacy training prefix")
+        if instruction.strip().lower().startswith("new question:"):
+            errors.append(f"[{idx}] instruction should not start with 'New question:' header")
+        if len(instruction.strip()) < 20:
+            errors.append(f"[{idx}] instruction too short to be a complete question")
     if not isinstance(output, str) or not output.strip():
         errors.append(f"[{idx}] missing or empty output")
         return errors
 
-    first_line = _first_nonempty_line(output)
-    if not first_line.startswith(NEW_QUESTION_PREFIX):
-        errors.append(f"[{idx}] missing 'New question:' line at top")
-        new_question = ""
-    else:
-        new_question = first_line[len(NEW_QUESTION_PREFIX) :].strip()
-        if not new_question:
-            errors.append(f"[{idx}] empty new question text")
+    # Output should start with a <think> block (since instruction is the question).
+    if not _first_nonempty_line(output).lower().startswith("<think>"):
+        errors.append(f"[{idx}] output should start with <think>...</think>")
 
     if require_think:
-        think_count = output.count("<think>")
-        end_count = output.count("</think>")
+        think_count = output.lower().count("<think>")
+        end_count = output.lower().count("</think>")
         if think_count != 1 or end_count != 1:
             errors.append(f"[{idx}] expected exactly one <think>...</think> block")
         else:
-            start = output.find("<think>")
-            end = output.find("</think>")
+            low = output.lower()
+            start = low.find("<think>")
+            end = low.find("</think>")
             if end < start:
                 errors.append(f"[{idx}] </think> appears before <think>")
             else:
@@ -133,26 +94,36 @@ def _validate_item(
         if "<think>" in output or "</think>" in output:
             errors.append(f"[{idx}] unexpected <think> tag in stripped mode")
 
-    if "</think>" in output:
-        tail = output.split("</think>", 1)[1]
+    if "</think>" in output.lower():
+        # split in a case-insensitive way
+        m = re.search(r"(?is)</think>", output)
+        tail = output[m.end() :] if m else ""
     else:
         tail = output
     tail = tail.strip()
     if not tail:
         errors.append(f"[{idx}] missing solution content after <think>")
     else:
-        last_boxed = _extract_last_boxed(tail)
-        if not last_boxed:
-            errors.append(f"[{idx}] missing final \\\\boxed{{...}} in solution")
+        if "\\boxed{" in tail:
+        # Must end with "**Final Answer:** ..."
+        lines = [ln.rstrip() for ln in tail.splitlines() if ln.strip()]
+        if not lines:
+            errors.append(f"[{idx}] missing content after </think>")
         else:
-            boxed_token = f"\\\\boxed{{{last_boxed}}}"
-            if not tail.rstrip().endswith(boxed_token):
-                errors.append(f"[{idx}] final \\\\boxed{{...}} is not the last output")
-
-    original_question = _extract_original_question(instruction)
-    if original_question and new_question:
-        if _normalize_text(original_question) == _normalize_text(new_question):
-            errors.append(f"[{idx}] new question matches original question")
+            last = lines[-1].strip()
+            if not last.startswith(FINAL_ANSWER_PREFIX):
+                errors.append(f"[{idx}] missing final '{FINAL_ANSWER_PREFIX} ...' line")
+            else:
+                val = last[len(FINAL_ANSWER_PREFIX) :].strip()
+                if not val:
+                    errors.append(f"[{idx}] empty final answer after '{FINAL_ANSWER_PREFIX}'")
+                else:
+                    # Require boxed final answer.
+                    if "\\boxed{" not in val:
+                        errors.append(f"[{idx}] final answer must be wrapped in \\\\boxed{{...}}")
+                    # Ensure the last non-empty line ends with the boxed token (no trailing text).
+                    if not re.search(r"\\boxed\\{[\\s\\S]*\\}\\s*$", val):
+                        errors.append(f"[{idx}] boxed final answer is not properly closed at end of line")
 
     return errors
 
