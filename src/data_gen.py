@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Tuple, Optional
 from jinja2 import Template
 from tqdm import tqdm
 
-from utils import extract_last_boxed, init_openai_client, write_json
+from utils import init_openai_client, write_json
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -23,30 +23,61 @@ DEFAULT_SYSTEM_PROMPT = (
     "- Do NOT restate or paraphrase the original question.\n"
     "- The new question must be unambiguous and have a single correct final answer.\n"
     "- The reasoning must be correct and consistent with the final answer.\n"
+    "- Do NOT output <think> or </think>.\n"
     "\n"
     "Output format (must follow strictly):\n"
-    "1) A line starting with `New question:` followed by your new problem.\n"
-    "2) A single `<think>...</think>` block containing the reasoning steps.\n"
-    "3) After `</think>`, write the solution (can be short), and end with a line containing `**Final Answer:** ...`.\n"
-    "4) The `**Final Answer:** ...` line must be the last thing you write.\n"
+    "Question:\n"
+    "<your new question>\n"
+    "Solution:\n"
+    "<your solution>\n"
 )
 
 
-_THINK_BLOCK_RE = re.compile(r"<think>[\s\S]*?</think>\s*", re.IGNORECASE)
-_TAG_BLOCK_RE = re.compile(
-    r"<\|begin_of_thought\|>[\s\S]*?<\|end_of_thought\|>\s*"
-    r"|<\|begin_of_solution\|>[\s\S]*?<\|end_of_solution\|>\s*",
-    re.IGNORECASE,
-)
-
-NEW_QUESTION_PREFIX = "New question:"
-FINAL_ANSWER_PREFIX = "**Final Answer:**"
-_BOX_RE = re.compile(r"\\boxed\{([^}]*)\}")
+QUESTION_HEADERS = ("Question:", "New question:", "Problem:")
+SOLUTION_HEADERS = ("Solution:", "Answer:", "Output:")
 
 
 def _load_template(path: str) -> Template:
     with open(path, "r", encoding="utf-8") as f:
         return Template(f.read())
+
+
+def _load_few_shot_example(path: Optional[str], index: Optional[int]) -> Optional[Dict[str, str]]:
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    if not isinstance(data, list) or not data:
+        return None
+
+    def _coerce(item: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        instruction = item.get("instruction", "")
+        output = item.get("output", "")
+        user_input = item.get("input", "")
+        if not isinstance(instruction, str) or not instruction.strip():
+            return None
+        if not isinstance(output, str) or not output.strip():
+            return None
+        return {
+            "instruction": instruction.strip(),
+            "input": user_input.strip() if isinstance(user_input, str) else "",
+            "output": output.strip(),
+        }
+
+    if index is not None:
+        if 0 <= index < len(data) and isinstance(data[index], dict):
+            return _coerce(data[index])
+        return None
+
+    for item in data:
+        if isinstance(item, dict):
+            example = _coerce(item)
+            if example:
+                return example
+    return None
 
 
 def _extract_response_text(resp: Any) -> str:
@@ -103,11 +134,14 @@ def _call_model(
     return content.strip() if isinstance(content, str) else ""
 
 def _strip_unwanted_tags(text: str) -> str:
-    """Best-effort cleanup for special training tags (keep <think> for new format)."""
+    """Best-effort cleanup for special training tags and <think> blocks."""
     if not isinstance(text, str) or not text.strip():
         return ""
-    # Remove the special training tags if they appear (some models emit these).
-    text = _TAG_BLOCK_RE.sub("", text)
+    # Remove special training tags if they appear (some models emit these).
+    text = re.sub(r"(?is)<\|begin_of_thought\|>([\s\S]*?)<\|end_of_thought\|>", r"\1", text)
+    text = re.sub(r"(?is)<\|begin_of_solution\|>([\s\S]*?)<\|end_of_solution\|>", r"\1", text)
+    text = re.sub(r"(?is)<think>([\s\S]*?)</think>", r"\1", text)
+    text = text.replace("<think>", "").replace("</think>", "")
     return text.strip()
 
 def _normalize_text(s: str) -> str:
@@ -140,164 +174,49 @@ def _too_similar(a: str, b: str) -> bool:
         return True
     return False
 
-def _debox(text: str) -> str:
-    """Remove a single outer \\boxed{...} wrapper if present."""
-    if not isinstance(text, str):
-        return ""
-    t = text.strip()
-    if "\\boxed{" not in t:
-        return t
-    # If the entire string is one boxed expression, unwrap it.
-    m = _BOX_RE.fullmatch(t)
-    if m:
-        return (m.group(1) or "").strip()
-    return t
+def _find_header_positions(text: str, headers: Tuple[str, ...]) -> List[Tuple[int, str]]:
+    lower = text.lower()
+    positions: List[Tuple[int, str]] = []
+    for header in headers:
+        h_low = header.lower()
+        start = 0
+        while True:
+            idx = lower.find(h_low, start)
+            if idx == -1:
+                break
+            positions.append((idx, header))
+            start = idx + len(h_low)
+    return sorted(positions, key=lambda x: x[0])
 
-def _strip_latex_wrappers(s: str) -> str:
-    """Strip common LaTeX math wrappers like \\( ... \\), $$...$$, $...$."""
-    if not isinstance(s, str):
-        return ""
-    t = s.strip()
-    # Remove surrounding \(...\) repeatedly
-    while t.startswith("\\(") and t.endswith("\\)"):
-        t = t[2:-2].strip()
-    # Remove surrounding $$...$$
-    while t.startswith("$$") and t.endswith("$$") and len(t) >= 4:
-        t = t[2:-2].strip()
-    # Remove surrounding $...$
-    while t.startswith("$") and t.endswith("$") and len(t) >= 2:
-        t = t[1:-1].strip()
-    return t
 
-def _clean_final_answer(raw: str) -> str:
-    """Normalize final answer string and return an unboxed value/expression."""
-    if not isinstance(raw, str):
-        return ""
-    t = _strip_latex_wrappers(raw.strip())
-    # If there's any boxed anywhere, prefer the last boxed content.
-    boxed_any = extract_last_boxed(t)
-    if boxed_any:
-        t = boxed_any.strip()
-    else:
-        # Fallback: unwrap if the whole string is boxed.
-        t = _debox(t).strip()
-    t = _strip_latex_wrappers(t)
-    # Avoid leaving a boxed token around.
-    if "\\boxed{" in t:
-        # If still present, try once more.
-        boxed_any2 = extract_last_boxed(t)
-        if boxed_any2:
-            t = boxed_any2.strip()
-        else:
-            t = t.replace("\\boxed{", "").replace("}", "").strip()
-    return t.strip()
-
-def _ensure_boxed(ans: str) -> str:
-    """Wrap ans in \\boxed{...} unless it already contains a boxed expression (use the last one)."""
-    if not isinstance(ans, str):
-        return ""
-    a = ans.strip()
-    if not a:
-        return ""
-    boxed = extract_last_boxed(a)
-    if boxed:
-        inner = boxed.strip()
-        return f"\\boxed{{{inner}}}" if inner else ""
-    inner = _clean_final_answer(a)
-    return f"\\boxed{{{inner}}}" if inner else ""
-
-def _first_nonempty_line(text: str) -> str:
-    for ln in (text or "").splitlines():
-        if ln.strip():
-            return ln.strip()
-    return ""
-
-def _parse_new_format(model_output: str) -> Optional[Tuple[str, str]]:
+def _parse_question_solution_format(model_output: str) -> Optional[Tuple[str, str]]:
     """
-    Parse model output in the NEW format:
-      New question: ...
-      <think>...</think>
+    Parse model output in the format:
+      Question:
       ...
-      **Final Answer:** ...
-    Returns (new_question, answer_output) where answer_output excludes the New question line.
+      Solution:
+      ...
+    Returns (new_question, answer_output).
     """
     text = _strip_unwanted_tags(model_output)
     if not text:
         return None
 
-    # Require the first non-empty line to be the New question line.
-    first = _first_nonempty_line(text)
-    if not first.startswith(NEW_QUESTION_PREFIX):
-        return None
-    new_question_inline = first[len(NEW_QUESTION_PREFIX) :].strip()
-
-    # Require exactly one think block (case-insensitive).
-    think_matches = list(re.finditer(r"(?is)<think>[\s\S]*?</think>", text))
-    if len(think_matches) != 1:
-        return None
-    think_raw = think_matches[0].group(0)
-    m_think = re.match(r"(?is)<think>([\s\S]*?)</think>", think_raw)
-    if not m_think:
-        return None
-    think_body = (m_think.group(1) or "").strip()
-    if not think_body:
-        return None
-    # Normalize tag casing for consistency in training data.
-    think_block = f"<think>{think_body}</think>"
-
-    # Always collect question content from the region between the "New question:" line and <think>.
-    # This supports multi-line questions even when the first line already has some text.
-    start_pos = text.find(first)
-    q_lines: List[str] = []
-    if new_question_inline:
-        q_lines.append(new_question_inline)
-    if start_pos >= 0:
-        region = text[start_pos + len(first) : think_matches[0].start()]
-        for ln in region.splitlines():
-            ln = ln.strip()
-            if not ln:
-                continue
-            if ln.startswith(NEW_QUESTION_PREFIX):
-                ln = ln[len(NEW_QUESTION_PREFIX) :].strip()
-            if ln:
-                q_lines.append(ln)
-    new_question = " ".join(q_lines).strip()
-    if not new_question:
-        return None
-    # Basic completeness check: avoid extremely short or fragmentary "questions".
-    if len(new_question) < 20:
+    q_positions = _find_header_positions(text, QUESTION_HEADERS)
+    s_positions = _find_header_positions(text, SOLUTION_HEADERS)
+    if not q_positions or not s_positions:
         return None
 
-    tail = text[think_matches[0].end() :].lstrip()
-    if not tail.strip():
-        return None
-
-    tail_lines = tail.splitlines()
-    last_idx = None
-    for i in range(len(tail_lines) - 1, -1, -1):
-        if tail_lines[i].strip():
-            last_idx = i
-            break
-    if last_idx is None:
-        return None
-
-    last_line = tail_lines[last_idx].strip()
-    if not last_line.startswith(FINAL_ANSWER_PREFIX):
-        return None
-    final_val = last_line[len(FINAL_ANSWER_PREFIX) :].strip()
-    boxed_val = _ensure_boxed(final_val)
-    if not boxed_val:
-        return None
-    tail_lines[last_idx] = f"{FINAL_ANSWER_PREFIX} {boxed_val}".rstrip()
-
-    # Ensure nothing after the final answer except whitespace.
-    after = "\n".join(tail_lines[last_idx + 1 :]).strip()
-    if after:
-        return None
-
-    tail_clean = "\n".join(tail_lines).strip()
-    answer_out = f"{think_block}\n\n{tail_clean}".strip()
-    return new_question, answer_out
+    for q_idx, q_header in reversed(q_positions):
+        s_after = next((s for s in s_positions if s[0] > q_idx), None)
+        if not s_after:
+            continue
+        s_idx, s_header = s_after
+        question = text[q_idx + len(q_header) : s_idx].strip()
+        answer = text[s_idx + len(s_header) :].strip()
+        if question and answer:
+            return question, answer
+    return None
 
 
 def _build_training_dict(
@@ -307,12 +226,12 @@ def _build_training_dict(
     """
     Post-process raw model text into a training dict (alpaca) for NEW question solving:
       - instruction: the NEW question text (not the original bad-case question)
-      - output: <think>...</think> + solution + last line **Final Answer:** ...
+      - output: solution text (no <think> tags)
     """
     original_question = original_question if isinstance(original_question, str) else ""
     original_question = original_question.strip()
 
-    parsed = _parse_new_format(model_output)
+    parsed = _parse_question_solution_format(model_output)
     if not parsed:
         return {}
     new_question, answer_out = parsed
@@ -320,8 +239,14 @@ def _build_training_dict(
     if original_question and _too_similar(new_question, original_question):
         return {}
 
-    # Guardrail: discourage leaking the "New question:" header into the training output.
-    if answer_out.lstrip().startswith(NEW_QUESTION_PREFIX):
+    # Guardrail: discourage leaking the prompt headers into training output.
+    lower_out = answer_out.lstrip().lower()
+    if lower_out.startswith("question:") or lower_out.startswith("new question:"):
+        return {}
+    if lower_out.startswith("solution:") or lower_out.startswith("answer:"):
+        answer_out = answer_out.split(":", 1)[-1].strip()
+
+    if len(new_question.strip()) < 20 or not answer_out.strip():
         return {}
 
     return {"instruction": new_question, "input": "", "output": answer_out}
@@ -344,6 +269,8 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.2, help="生成温度")
     parser.add_argument("--num-per-case", type=int, default=1, help="每条归因生成样本数")
     parser.add_argument("--max-retries", type=int, default=4, help="单个样本解析/校验失败时的最大重试次数")
+    parser.add_argument("--few-shot-path", type=str, default=None, help="few-shot 示例 JSON 文件路径")
+    parser.add_argument("--few-shot-index", type=int, default=None, help="few-shot 示例索引（默认取首条）")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as f:
@@ -355,6 +282,9 @@ def main() -> None:
         data = data[: args.limit]
 
     template = _load_template(args.prompt)
+    few_shot = _load_few_shot_example(args.few_shot_path, args.few_shot_index)
+    if args.few_shot_path and not few_shot:
+        print(f"[warn] few-shot 示例加载失败: {args.few_shot_path}")
     num_per_case = max(1, int(args.num_per_case))
 
     def _build_one(idx_item: Tuple[int, Dict[str, Any]]) -> Tuple[int, List[Dict[str, Any]]]:
@@ -374,6 +304,7 @@ def main() -> None:
             attribution=attr,
             question=question,
             answer=answer,
+            few_shot=few_shot,
         )
         client = init_openai_client()
 

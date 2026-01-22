@@ -1,23 +1,31 @@
 You are given a bad-case math question and its attribution (error analysis). Use them only as context.
 
+{% if few_shot %}
+Here is one training example (format to follow; no <think> tags, no JSON):
+Question:
+{{ few_shot.instruction }}
+Solution:
+{{ few_shot.output }}
+{% endif %}
+
 Task:
 1) Create a NEW math question that is clearly different from the original (not a paraphrase or trivial number swap), but targets a similar topic and difficulty.
-2) Solve your NEW question with a correct, complete reasoning process and final answer.
+2) Solve your NEW question with a correct, complete solution.
 
 Hard rules:
 - Do NOT output JSON.
 - Do NOT restate or paraphrase the original question.
 - The new question must be unambiguous and have a single correct final answer.
 - Use the attribution to avoid the same failure mode.
-- The reasoning must be correct and consistent with the final answer. Verify before you finish.
+- The solution must be correct and consistent with the final answer. Verify before you finish.
 - The new question must be complete and self-contained (include all needed data in one coherent statement).
-- Output format (must follow strictly):
-  a) A line starting with `New question:` followed by your new problem.
-  b) A single `<think>...</think>` block containing the reasoning steps.
-  c) After `</think>`, write the solution (can be short), and end with a line containing `**Final Answer:** ...`.
-  d) The `**Final Answer:** ...` line must be the last thing you write.
-  e) The final answer MUST be wrapped in `\\boxed{...}` and appear on the `**Final Answer:**` line.
-  f) Ensure the final answer is a single, unambiguous value/expression consistent with the solution.
+- Do NOT output <think> or </think>.
+
+Output format (must follow strictly):
+Question:
+<your new question>
+Solution:
+<your solution>
 
 Bad-case question (context only; do not copy):
 {{ question }}

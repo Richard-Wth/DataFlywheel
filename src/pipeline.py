@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -10,9 +11,30 @@ import random
 import sys
 import atexit
 
-from utils import read_json, write_json
+from utils import extract_last_boxed, read_json, write_json
 
 MATH500_DATASET_ID = "HuggingFaceH4/MATH-500"
+NUMINA_DATASET_ID = "AI-MO/NuminaMath-CoT"
+QUESTION_FIELD_CANDIDATES = (
+    "problem",
+    "question",
+    "prompt",
+    "query",
+    "input",
+    "text",
+    "statement",
+    "instruction",
+)
+SOLUTION_FIELD_CANDIDATES = (
+    "solution",
+    "output",
+    "response",
+    "completion",
+    "analysis",
+    "answer",
+)
+FINAL_FIELD_CANDIDATES = ("final_answer", "final", "result", "answer")
+_HASH_RE = re.compile(r"####\s*(.+)$", re.MULTILINE)
 
 
 def _now_tag() -> str:
@@ -55,6 +77,102 @@ _LOG_FH = None
 def _format_cmd(template: str, **kwargs) -> List[str]:
     formatted = template.format(**kwargs)
     return shlex.split(formatted)
+
+
+def _get_text_field(example: Dict[str, Any], keys: Tuple[str, ...]) -> str:
+    for key in keys:
+        value = example.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _normalize_answer_value(value: Any) -> str:
+    if isinstance(value, dict):
+        if "value" in value:
+            value = value.get("value")
+        else:
+            return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, list):
+        if len(value) == 1:
+            value = value[0]
+        else:
+            return json.dumps(value, ensure_ascii=False)
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _ensure_boxed_final(final: str) -> str:
+    if not isinstance(final, str):
+        return ""
+    final = final.strip()
+    if not final:
+        return ""
+    if "\\boxed{" in final:
+        return final
+    return f"\\boxed{{{final}}}"
+
+
+def _dataset_name_from_id(dataset_id: str) -> str:
+    if not dataset_id:
+        return "dataset"
+    return dataset_id.split("/")[-1].lower()
+
+
+def _load_dataset_split(
+    dataset_id: str,
+    split: Optional[str],
+    config: Optional[str],
+):
+    from datasets import load_dataset
+
+    if split:
+        try:
+            if config:
+                return load_dataset(dataset_id, config, split=split)
+            return load_dataset(dataset_id, split=split)
+        except Exception:
+            pass
+
+    if config:
+        dataset_obj = load_dataset(dataset_id, config)
+    else:
+        dataset_obj = load_dataset(dataset_id)
+
+    if hasattr(dataset_obj, "keys"):
+        if split and split in dataset_obj:
+            return dataset_obj[split]
+        for split_name in ("test", "validation", "train"):
+            if split_name in dataset_obj:
+                return dataset_obj[split_name]
+        first_split = next(iter(dataset_obj.keys()))
+        return dataset_obj[first_split]
+    return dataset_obj
+
+
+def _extract_solution_text(example: Dict[str, Any]) -> str:
+    text = _get_text_field(example, SOLUTION_FIELD_CANDIDATES)
+    if text:
+        return text
+    for key in FINAL_FIELD_CANDIDATES:
+        if key in example:
+            return _normalize_answer_value(example.get(key))
+    return ""
+
+
+def _extract_final_answer(example: Dict[str, Any], solution_text: str) -> str:
+    final = _get_text_field(example, FINAL_FIELD_CANDIDATES)
+    if final:
+        return final
+    if solution_text:
+        boxed = extract_last_boxed(solution_text)
+        if boxed:
+            return boxed
+        m = _HASH_RE.search(solution_text)
+        if m:
+            return m.group(1).strip()
+    return ""
 
 
 def _merge_json_lists(paths: List[str], output_path: str, shuffle: bool = False, seed: int = 42) -> int:
@@ -136,30 +254,95 @@ def build_math500_benchmark(
     split: str = "test",
     limit: Optional[int] = None,
 ) -> str:
-    from datasets import load_dataset
+    return build_hf_benchmark(
+        output_path=output_path,
+        dataset_id=MATH500_DATASET_ID,
+        split=split,
+        limit=limit,
+        config=None,
+        dataset_name="math500",
+    )
 
-    ds = load_dataset(MATH500_DATASET_ID, split=split)
+
+def build_hf_benchmark(
+    output_path: str,
+    dataset_id: str,
+    split: str = "test",
+    limit: Optional[int] = None,
+    config: Optional[str] = None,
+    dataset_name: Optional[str] = None,
+) -> str:
+    ds = _load_dataset_split(dataset_id=dataset_id, split=split, config=config)
     if limit is not None:
-        ds = ds.select(range(int(limit)))
+        if hasattr(ds, "select"):
+            ds = ds.select(range(int(limit)))
+        else:
+            ds = list(ds)[: int(limit)]
 
+    name = dataset_name or _dataset_name_from_id(dataset_id)
     rows: List[Dict[str, Any]] = []
+    difficulty_default = "hard" if dataset_id == MATH500_DATASET_ID else "unknown"
     for i, ex in enumerate(ds):
         ex = dict(ex)
-        ans = ex.get("answer", "")
-        if isinstance(ans, dict):
-            ex["answer"] = str(ans.get("value", "")).strip()
-        else:
-            ex["answer"] = str(ans).strip()
+        question = _get_text_field(ex, QUESTION_FIELD_CANDIDATES)
+        if not question:
+            question = json.dumps(ex, ensure_ascii=False)
+        solution = _extract_solution_text(ex)
+        final = _extract_final_answer(ex, solution)
+        answer = solution
+        if final:
+            if not answer:
+                answer = final
+            else:
+                if not extract_last_boxed(answer) and not _HASH_RE.search(answer):
+                    answer = f"{answer}\n\n{_ensure_boxed_final(final)}"
 
-        ex["_dataset"] = "math500"
-        ex["_dataset_id"] = MATH500_DATASET_ID
-        ex["_difficulty"] = ex.get("_difficulty", "hard")
-        ex["_sample_index"] = i
-        rows.append(ex)
+        row = {
+            "question": question,
+            "answer": answer,
+            "_dataset": name,
+            "_dataset_id": dataset_id,
+            "_difficulty": ex.get("_difficulty", difficulty_default),
+            "_sample_index": i,
+        }
+        rows.append(row)
 
     _ensure_dir(os.path.dirname(output_path))
     write_json(output_path, rows)
-    print(f"已构建 MATH-500 benchmark: {output_path} ({len(rows)} 条)")
+    print(f"已构建 benchmark: {output_path} ({len(rows)} 条, {dataset_id}::{split})")
+    return output_path
+
+
+def build_hf_training_data(
+    output_path: str,
+    dataset_id: str,
+    split: str = "train",
+    limit: Optional[int] = None,
+    config: Optional[str] = None,
+) -> str:
+    ds = _load_dataset_split(dataset_id=dataset_id, split=split, config=config)
+    if limit is not None:
+        if hasattr(ds, "select"):
+            ds = ds.select(range(int(limit)))
+        else:
+            ds = list(ds)[: int(limit)]
+
+    rows: List[Dict[str, Any]] = []
+    for ex in ds:
+        ex = dict(ex)
+        question = _get_text_field(ex, QUESTION_FIELD_CANDIDATES)
+        if not question:
+            question = json.dumps(ex, ensure_ascii=False)
+        solution = _extract_solution_text(ex)
+        if not solution:
+            solution = _normalize_answer_value(ex.get("final_answer"))
+        if not solution:
+            continue
+        rows.append({"instruction": question, "input": "", "output": solution})
+
+    _ensure_dir(os.path.dirname(output_path))
+    write_json(output_path, rows)
+    print(f"已构建训练数据: {output_path} ({len(rows)} 条, {dataset_id}::{split})")
     return output_path
 
 
@@ -482,6 +665,8 @@ def run_data_gen(
     model: str,
     max_workers: int,
     num_per_case: int,
+    few_shot_path: Optional[str],
+    few_shot_index: Optional[int],
     dry_run: bool,
 ) -> None:
     _ensure_dir(os.path.dirname(output_path))
@@ -499,6 +684,10 @@ def run_data_gen(
         "--num-per-case",
         str(num_per_case),
     ]
+    if few_shot_path:
+        cmd.extend(["--few-shot-path", few_shot_path])
+    if few_shot_index is not None:
+        cmd.extend(["--few-shot-index", str(few_shot_index)])
     _run_cmd(cmd, dry_run=dry_run)
 
 
@@ -524,6 +713,12 @@ def main() -> None:
         default=None,
         help="初始训练数据 JSON 文件（list，可选，用于初始化 training.json）",
     )
+    parser.add_argument("--train-dataset-id", type=str, default=None, help="训练集 HF 数据集 ID")
+    parser.add_argument("--train-dataset-config", type=str, default=None, help="训练集 HF 数据集配置名")
+    parser.add_argument("--train-dataset-split", type=str, default="train", help="训练集 split")
+    parser.add_argument("--train-dataset-limit", type=int, default=None, help="训练集最多读取条数")
+    parser.add_argument("--rebuild-train-data", action="store_true", help="重新构建训练集 seed 文件")
+    parser.add_argument("--reset-training-json", action="store_true", help="重置累计训练数据文件")
     parser.add_argument(
         "--training-json",
         type=str,
@@ -554,6 +749,9 @@ def main() -> None:
         default=None,
         help="测试集输出路径（JSON list），默认写到 data/benchmark/math500.json",
     )
+    parser.add_argument("--benchmark-dataset-id", type=str, default=MATH500_DATASET_ID, help="benchmark HF 数据集 ID")
+    parser.add_argument("--benchmark-dataset-config", type=str, default=None, help="benchmark HF 数据集配置名")
+    parser.add_argument("--benchmark-dataset-name", type=str, default=None, help="benchmark 数据集名称标识")
     parser.add_argument(
         "--benchmark-split",
         type=str,
@@ -624,6 +822,10 @@ def main() -> None:
         action="store_true",
         help="每轮训练从上一轮最新 checkpoint 继续，而不是从 base 重新训练",
     )
+    parser.add_argument("--train-base", action="store_true", help="先在 train split 上训练 base model")
+    parser.add_argument("--base-train-tag", type=str, default="base_train", help="base model 训练输出目录名")
+    parser.add_argument("--few-shot-path", type=str, default=None, help="数据生成 few-shot 示例文件路径")
+    parser.add_argument("--few-shot-index", type=int, default=None, help="few-shot 示例索引（默认取首条）")
     parser.add_argument(
         "--hf-home",
         type=str,
@@ -676,27 +878,81 @@ def main() -> None:
     atexit.register(lambda: _LOG_FH and _LOG_FH.close())
     print(f"日志已写入: {log_path}")
 
+    seed_train_data = args.train_data
+    if args.train_dataset_id:
+        if not seed_train_data:
+            dataset_tag = _dataset_name_from_id(args.train_dataset_id)
+            limit_tag = str(args.train_dataset_limit or "all")
+            seed_train_data = os.path.join(
+                args.data_dir, "training", f"{dataset_tag}_train_{limit_tag}.json"
+            )
+        if args.rebuild_train_data or (not os.path.exists(seed_train_data)):
+            build_hf_training_data(
+                output_path=seed_train_data,
+                dataset_id=args.train_dataset_id,
+                split=args.train_dataset_split,
+                limit=args.train_dataset_limit,
+                config=args.train_dataset_config,
+            )
+
     benchmark_path = args.benchmark_path or os.path.join(args.data_dir, "benchmark", "math500.json")
     if args.rebuild_benchmark or (not os.path.exists(benchmark_path)):
-        build_math500_benchmark(
-            output_path=benchmark_path,
-            split=args.benchmark_split,
-            limit=args.benchmark_build_limit,
-        )
+        dataset_id = args.benchmark_dataset_id or MATH500_DATASET_ID
+        if dataset_id == MATH500_DATASET_ID:
+            build_math500_benchmark(
+                output_path=benchmark_path,
+                split=args.benchmark_split,
+                limit=args.benchmark_build_limit,
+            )
+        else:
+            build_hf_benchmark(
+                output_path=benchmark_path,
+                dataset_id=dataset_id,
+                split=args.benchmark_split,
+                limit=args.benchmark_build_limit,
+                config=args.benchmark_dataset_config,
+                dataset_name=args.benchmark_dataset_name,
+            )
 
     training_json = args.training_json or os.path.join(args.data_dir, "training", "training.json")
-    _ensure_json_list_file(training_json, seed_path=args.train_data)
+    if args.reset_training_json and os.path.exists(training_json):
+        os.remove(training_json)
+    _ensure_json_list_file(training_json, seed_path=seed_train_data)
     if not args.dry_run:
         print(f"累计训练数据: {_count_json_list(training_json)} 条 ({training_json})")
+    few_shot_path = args.few_shot_path or seed_train_data
 
-    # 0) Base model inference on MATH-500 (baseline)
-    base_tag = "base"
-    print(f"\n=== Baseline: {args.base_model} ===")
+    base_tag = args.base_train_tag if args.train_base else "base"
+    base_model_for_eval = args.base_model
+    base_train_output_dir: Optional[str] = None
+    if args.train_base:
+        base_train_output_dir = os.path.join(args.save_dir, args.run_name, base_tag)
+        if not args.dry_run:
+            base_train_count = _count_json_list(training_json)
+            print(f"Base 训练样本数: {base_train_count} ({training_json})")
+        train_with_llamafactory(
+            cmd_template=args.llamafactory_cmd,
+            config_template=args.llamafactory_config,
+            llamafactory_cli=args.llamafactory_cli,
+            llamafactory_root=args.llamafactory_root,
+            model_name_or_path=args.base_model,
+            train_data_path=training_json,
+            output_dir=base_train_output_dir,
+            run_name=f"{args.run_name}_base",
+            iteration=0,
+            config_output_dir=os.path.join(args.data_dir, "llamafactory_configs", args.run_name, base_tag),
+            data_dir=args.data_dir,
+            dry_run=args.dry_run,
+        )
+        base_model_for_eval = base_train_output_dir
+
+    # 0) Base model inference on benchmark (baseline)
+    print(f"\n=== Baseline: {base_model_for_eval} ===")
     base_infer_output = os.path.join(args.output_dir, "inference", args.run_name, base_tag, "pred.json")
     run_inference(
         script_path=os.path.join(os.path.dirname(__file__), "inference.py"),
         python_exec=args.inference_python,
-        model_path=args.base_model,
+        model_path=base_model_for_eval,
         input_path=benchmark_path,
         output_path=base_infer_output,
         tp=int(args.tp),
@@ -733,7 +989,7 @@ def main() -> None:
     # Each round uses the previous model's bad cases to generate more data.
     prev_bad_cases = base_bad_cases_path
     prev_stat = base_judge_stat
-    prev_train_output_dir: Optional[str] = None
+    prev_train_output_dir: Optional[str] = base_train_output_dir
 
     post_stat_paths: List[str] = []
     for i in range(int(args.iterations)):
@@ -758,6 +1014,8 @@ def main() -> None:
             model=args.gen_model,
             max_workers=int(args.max_workers),
             num_per_case=int(args.num_per_case),
+            few_shot_path=few_shot_path,
+            few_shot_index=args.few_shot_index,
             dry_run=args.dry_run,
         )
 
@@ -774,7 +1032,7 @@ def main() -> None:
         if not args.dry_run:
             train_count = _count_json_list(training_json)
             print(f"本轮训练样本数: {train_count} ({training_json})")
-        model_for_training = args.base_model
+        model_for_training = base_model_for_eval
         if args.train_from_prev and prev_train_output_dir:
             latest_ckpt = _find_latest_checkpoint_dir(prev_train_output_dir)
             if latest_ckpt:
