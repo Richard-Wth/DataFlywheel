@@ -32,8 +32,6 @@ TRAIN_DATASET_LIMIT="${TRAIN_DATASET_LIMIT:-10000}"
 BENCHMARK_DATASET_ID="${BENCHMARK_DATASET_ID:-AI-MO/NuminaMath-CoT}"
 BENCHMARK_DATASET_CONFIG="${BENCHMARK_DATASET_CONFIG:-}"
 BENCHMARK_SPLIT="${BENCHMARK_SPLIT:-test}"
-FEW_SHOT_PATH="${FEW_SHOT_PATH:-${SEED_TRAIN_DATA}}"
-FEW_SHOT_INDEX="${FEW_SHOT_INDEX:-0}"
 
 ITERATIONS="${ITERATIONS:-5}"
 MODE="${MODE:-full}"
@@ -87,8 +85,6 @@ fi
   --train-dataset-id "${TRAIN_DATASET_ID}" \
   --train-dataset-split "${TRAIN_DATASET_SPLIT}" \
   --train-dataset-limit "${TRAIN_DATASET_LIMIT}" \
-  --few-shot-path "${FEW_SHOT_PATH}" \
-  --few-shot-index "${FEW_SHOT_INDEX}" \
   --llamafactory-config "${LLAMAFACTORY_CONFIG}" \
   --llamafactory-root "${LLAMAFACTORY_ROOT}" \
   --llamafactory-cli "${LLAMAFACTORY_CLI}" \

@@ -665,8 +665,6 @@ def run_data_gen(
     model: str,
     max_workers: int,
     num_per_case: int,
-    few_shot_path: Optional[str],
-    few_shot_index: Optional[int],
     dry_run: bool,
 ) -> None:
     _ensure_dir(os.path.dirname(output_path))
@@ -684,10 +682,6 @@ def run_data_gen(
         "--num-per-case",
         str(num_per_case),
     ]
-    if few_shot_path:
-        cmd.extend(["--few-shot-path", few_shot_path])
-    if few_shot_index is not None:
-        cmd.extend(["--few-shot-index", str(few_shot_index)])
     _run_cmd(cmd, dry_run=dry_run)
 
 
@@ -824,8 +818,6 @@ def main() -> None:
     )
     parser.add_argument("--train-base", action="store_true", help="先在 train split 上训练 base model")
     parser.add_argument("--base-train-tag", type=str, default="base_train", help="base model 训练输出目录名")
-    parser.add_argument("--few-shot-path", type=str, default=None, help="数据生成 few-shot 示例文件路径")
-    parser.add_argument("--few-shot-index", type=int, default=None, help="few-shot 示例索引（默认取首条）")
     parser.add_argument(
         "--hf-home",
         type=str,
@@ -920,8 +912,6 @@ def main() -> None:
     _ensure_json_list_file(training_json, seed_path=seed_train_data)
     if not args.dry_run:
         print(f"累计训练数据: {_count_json_list(training_json)} 条 ({training_json})")
-    few_shot_path = args.few_shot_path or seed_train_data
-
     base_tag = args.base_train_tag if args.train_base else "base"
     base_model_for_eval = args.base_model
     base_train_output_dir: Optional[str] = None
@@ -1014,8 +1004,6 @@ def main() -> None:
             model=args.gen_model,
             max_workers=int(args.max_workers),
             num_per_case=int(args.num_per_case),
-            few_shot_path=few_shot_path,
-            few_shot_index=args.few_shot_index,
             dry_run=args.dry_run,
         )
 

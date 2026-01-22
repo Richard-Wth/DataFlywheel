@@ -22,19 +22,31 @@ DEFAULT_SYSTEM_PROMPT = (
     "- Do NOT output JSON.\n"
     "- Do NOT restate or paraphrase the original question.\n"
     "- The new question must be unambiguous and have a single correct final answer.\n"
-    "- The reasoning must be correct and consistent with the final answer.\n"
+    "- The derivation must be correct and consistent with the final answer.\n"
     "- Do NOT output <think> or </think>.\n"
     "\n"
     "Output format (must follow strictly):\n"
     "Question:\n"
     "<your new question>\n"
-    "Solution:\n"
-    "<your solution>\n"
+    "Answer:\n"
+    "<your detailed derivation and final answer>\n"
+    "- The final non-empty line must contain the boxed answer in $\\boxed{...}$.\n"
 )
 
 
-QUESTION_HEADERS = ("Question:", "New question:", "Problem:")
-SOLUTION_HEADERS = ("Solution:", "Answer:", "Output:")
+QUESTION_HEADERS = ("Question:",)
+ANSWER_HEADERS = ("Answer:",)
+
+
+def _boxed_final_line_ok(line: str) -> bool:
+    if not isinstance(line, str):
+        return False
+    matches = list(re.finditer(r"\\boxed\{[^}]+\\}", line))
+    if not matches:
+        return False
+    last = matches[-1]
+    tail = line[last.end() :].strip()
+    return bool(re.fullmatch(r"\$?\s*[\.。]?", tail))
 
 
 def _load_template(path: str) -> Template:
@@ -42,42 +54,6 @@ def _load_template(path: str) -> Template:
         return Template(f.read())
 
 
-def _load_few_shot_example(path: Optional[str], index: Optional[int]) -> Optional[Dict[str, str]]:
-    if not path or not os.path.exists(path):
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return None
-    if not isinstance(data, list) or not data:
-        return None
-
-    def _coerce(item: Dict[str, Any]) -> Optional[Dict[str, str]]:
-        instruction = item.get("instruction", "")
-        output = item.get("output", "")
-        user_input = item.get("input", "")
-        if not isinstance(instruction, str) or not instruction.strip():
-            return None
-        if not isinstance(output, str) or not output.strip():
-            return None
-        return {
-            "instruction": instruction.strip(),
-            "input": user_input.strip() if isinstance(user_input, str) else "",
-            "output": output.strip(),
-        }
-
-    if index is not None:
-        if 0 <= index < len(data) and isinstance(data[index], dict):
-            return _coerce(data[index])
-        return None
-
-    for item in data:
-        if isinstance(item, dict):
-            example = _coerce(item)
-            if example:
-                return example
-    return None
 
 
 def _extract_response_text(resp: Any) -> str:
@@ -189,7 +165,7 @@ def _find_header_positions(text: str, headers: Tuple[str, ...]) -> List[Tuple[in
     return sorted(positions, key=lambda x: x[0])
 
 
-def _parse_question_solution_format(model_output: str) -> Optional[Tuple[str, str]]:
+def _parse_question_answer_format(model_output: str) -> Optional[Tuple[str, str]]:
     """
     Parse model output in the format:
       Question:
@@ -203,18 +179,23 @@ def _parse_question_solution_format(model_output: str) -> Optional[Tuple[str, st
         return None
 
     q_positions = _find_header_positions(text, QUESTION_HEADERS)
-    s_positions = _find_header_positions(text, SOLUTION_HEADERS)
-    if not q_positions or not s_positions:
+    a_positions = _find_header_positions(text, ANSWER_HEADERS)
+    if not q_positions or not a_positions:
         return None
 
     for q_idx, q_header in reversed(q_positions):
-        s_after = next((s for s in s_positions if s[0] > q_idx), None)
-        if not s_after:
+        a_after = next((a for a in a_positions if a[0] > q_idx), None)
+        if not a_after:
             continue
-        s_idx, s_header = s_after
-        question = text[q_idx + len(q_header) : s_idx].strip()
-        answer = text[s_idx + len(s_header) :].strip()
+        a_idx, a_header = a_after
+        question = text[q_idx + len(q_header) : a_idx].strip()
+        answer = text[a_idx + len(a_header) :].strip()
         if question and answer:
+            lines = [ln.strip() for ln in answer.splitlines() if ln.strip()]
+            if not lines:
+                return None
+            if not _boxed_final_line_ok(lines[-1]):
+                return None
             return question, answer
     return None
 
@@ -226,12 +207,12 @@ def _build_training_dict(
     """
     Post-process raw model text into a training dict (alpaca) for NEW question solving:
       - instruction: the NEW question text (not the original bad-case question)
-      - output: solution text (no <think> tags)
+      - output: derivation + final answer (no <think> tags)
     """
     original_question = original_question if isinstance(original_question, str) else ""
     original_question = original_question.strip()
 
-    parsed = _parse_question_solution_format(model_output)
+    parsed = _parse_question_answer_format(model_output)
     if not parsed:
         return {}
     new_question, answer_out = parsed
@@ -241,9 +222,9 @@ def _build_training_dict(
 
     # Guardrail: discourage leaking the prompt headers into training output.
     lower_out = answer_out.lstrip().lower()
-    if lower_out.startswith("question:") or lower_out.startswith("new question:"):
+    if lower_out.startswith("question:"):
         return {}
-    if lower_out.startswith("solution:") or lower_out.startswith("answer:"):
+    if lower_out.startswith("answer:"):
         answer_out = answer_out.split(":", 1)[-1].strip()
 
     if len(new_question.strip()) < 20 or not answer_out.strip():
@@ -269,8 +250,6 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.2, help="生成温度")
     parser.add_argument("--num-per-case", type=int, default=1, help="每条归因生成样本数")
     parser.add_argument("--max-retries", type=int, default=4, help="单个样本解析/校验失败时的最大重试次数")
-    parser.add_argument("--few-shot-path", type=str, default=None, help="few-shot 示例 JSON 文件路径")
-    parser.add_argument("--few-shot-index", type=int, default=None, help="few-shot 示例索引（默认取首条）")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as f:
@@ -282,9 +261,6 @@ def main() -> None:
         data = data[: args.limit]
 
     template = _load_template(args.prompt)
-    few_shot = _load_few_shot_example(args.few_shot_path, args.few_shot_index)
-    if args.few_shot_path and not few_shot:
-        print(f"[warn] few-shot 示例加载失败: {args.few_shot_path}")
     num_per_case = max(1, int(args.num_per_case))
 
     def _build_one(idx_item: Tuple[int, Dict[str, Any]]) -> Tuple[int, List[Dict[str, Any]]]:
@@ -304,7 +280,6 @@ def main() -> None:
             attribution=attr,
             question=question,
             answer=answer,
-            few_shot=few_shot,
         )
         client = init_openai_client()
 
